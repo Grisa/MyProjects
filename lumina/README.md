@@ -2,7 +2,9 @@
 
 Endless runner vertical. Uma bolinha de luz fica na base da tela e só anda para os lados. A luz é o campo de visão: no escuro as sombras só mostram uma borda colorida, e o brilho acende a face virada para a bolinha. Cada uma que passa soma um ponto. Cada colisão apaga um pedaço da luz. Quando a luz acaba, a partida termina.
 
-Faíscas caem com menos frequência que os inimigos. Pegar uma devolve um pouco da luz e soma uma faísca. As faíscas ficam salvas neste aparelho e compram melhorias: cada compra libera os próximos nós da árvore.
+Faíscas caem com menos frequência que os inimigos. Pegar uma devolve um pouco da luz e soma uma faísca. As faíscas ficam salvas neste aparelho e compram melhorias: cada compra libera os próximos nós da árvore. Dá para encolher o núcleo, estender a luz, ver a borda das sombras antes, sobreviver a um golpe fatal, frear a queda, espaçar os inimigos e transformar faísca em ponto.
+
+No menu, o nome fica fino e quase apagado. A luz da bolinha é que acende as letras. Os inimigos também só mostram o rosto nessa luz: a bolha é sonolenta, o caco é sério, a lasca se assusta e oscila, o vigia observa e o riso sorri.
 
 O recorde fica em `lumina-high-score`. As faíscas e as melhorias compradas ficam em `lumina-sparks` e `lumina-upgrades`. Tudo isso fica só neste aparelho. O jogo não envia dados para lugar nenhum.
 

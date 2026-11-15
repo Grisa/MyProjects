@@ -2,10 +2,10 @@ import {
   applyDamage,
   circlesOverlap,
   clamp,
-  diamondPoints,
   difficultyAt,
   edgeFacing,
   enemyHitsPlayerSweep,
+  enemyOutline,
   lerp,
 } from "./math.js";
 import { UPGRADES, bonuses, canBuy, nodeState, upgradeById } from "./upgrades.js";
@@ -14,13 +14,22 @@ const HIGH_SCORE_KEY = "lumina-high-score";
 const SPARKS_KEY = "lumina-sparks";
 const UPGRADES_KEY = "lumina-upgrades";
 const PORTRAIT = 9 / 16;
-const PLAYER_Y = 0.82;
 const CORE_FRAC = 0.028;
 const LIGHT_FRAC = 0.22;
 const TINTS = {
   rose: [255, 72, 112],
   violet: [188, 112, 255],
+  teal: [72, 214, 198],
+  copper: [255, 112, 64],
+  blue: [132, 170, 255],
 };
+const KINDS = [
+  { kind: "orb", tint: "rose", weight: 34, scale: 1 },
+  { kind: "diamond", tint: "violet", weight: 26, scale: 1 },
+  { kind: "shard", tint: "teal", weight: 16, scale: 0.88 },
+  { kind: "lantern", tint: "copper", weight: 14, scale: 1.08 },
+  { kind: "grin", tint: "blue", weight: 10, scale: 1.02 },
+];
 const FOLLOW = 14;
 const LIGHT_LERP = 4.2;
 const SHAKE_DECAY = 2.1;
@@ -48,6 +57,7 @@ const state = {
   calm: 0,
   shake: 0,
   dying: false,
+  guardUsed: false,
   width: 0,
   height: 0,
   viewW: 0,
@@ -127,12 +137,13 @@ function shownCoreRadius(player) {
 }
 
 function makePlayer(x) {
-  const core = unit() * CORE_FRAC;
-  const light = unit() * LIGHT_FRAC * perks().light;
+  const perk = perks();
+  const core = unit() * CORE_FRAC * perk.core;
+  const light = unit() * LIGHT_FRAC * perk.light;
   const clamped = clamp(x, core, Math.max(core, state.viewW - core));
   return {
     x: clamped,
-    y: state.viewH * PLAYER_Y,
+    y: state.viewH * perk.playerY,
     targetX: clamped,
     coreRadius: core,
     lightRadius: light,
@@ -188,8 +199,8 @@ function layout() {
   player.lightRadius *= sy;
   player.targetLight *= sy;
   player.initialLight *= sy;
-  player.y = state.viewH * PLAYER_Y;
-  player.coreRadius = unit() * CORE_FRAC;
+  player.y = state.viewH * perks().playerY;
+  player.coreRadius = unit() * CORE_FRAC * perks().core;
   player.x = clamp(player.x, player.coreRadius, state.viewW - player.coreRadius);
   player.targetX = clamp(player.targetX, player.coreRadius, state.viewW - player.coreRadius);
 
@@ -197,6 +208,7 @@ function layout() {
     enemy.x *= sx;
     enemy.y *= sy;
     enemy.r *= sy;
+    if (enemy.homeX != null) enemy.homeX *= sx;
   }
   for (const orb of state.orbs) {
     orb.x *= sx;
@@ -235,6 +247,7 @@ function resetRun(pointerX) {
   state.calm = 0;
   state.shake = 0;
   state.dying = false;
+  state.guardUsed = false;
   state.mode = "play";
   announce("Pontos 0");
 }
@@ -247,12 +260,21 @@ function endRun() {
   announce(`Fim de jogo. Pontos ${state.score}. Recorde ${state.highScore}.`);
 }
 
+function pickKind() {
+  let roll = Math.random() * KINDS.reduce((sum, kind) => sum + kind.weight, 0);
+  for (const kind of KINDS) {
+    roll -= kind.weight;
+    if (roll < 0) return kind;
+  }
+  return KINDS[0];
+}
+
 function spawnEnemy() {
-  const diamond = Math.random() >= 0.55;
+  const picked = pickKind();
   const r = clamp(
-    state.viewH * (0.038 + Math.random() * 0.022),
+    state.viewH * (0.038 + Math.random() * 0.022) * picked.scale,
     16,
-    state.viewW * 0.16,
+    state.viewW * 0.18,
   );
   const margin = r + 6;
   const span = Math.max(1, state.viewW - margin * 2);
@@ -265,11 +287,13 @@ function spawnEnemy() {
     x = margin + Math.random() * span;
   }
   state.enemies.push({
-    kind: diamond ? "diamond" : "orb",
-    tint: diamond ? "violet" : "rose",
+    kind: picked.kind,
+    tint: picked.tint,
     x,
     y: -r - 6,
     r,
+    homeX: x,
+    phase: Math.random() * Math.PI * 2,
   });
 }
 
@@ -289,8 +313,10 @@ function popup(x, y, text) {
 }
 
 function collectSpark(orb) {
-  const gained = perks().sparkValue;
+  const perk = perks();
+  const gained = perk.sparkValue;
   state.sparks += gained;
+  if (perk.sparkScore) state.score += perk.sparkScore;
   saveProgress();
   const player = state.player;
   player.targetLight = Math.min(player.initialLight, player.targetLight + player.initialLight * perks().heal);
@@ -328,7 +354,13 @@ function impactPoint(player, enemy) {
 function hurt(enemy) {
   const player = state.player;
   const hit = impactPoint(player, enemy);
-  player.targetLight = applyDamage(player.targetLight, player.initialLight, perks().damage);
+  const perk = perks();
+  let next = applyDamage(player.targetLight, player.initialLight, perk.damage);
+  if (next === 0 && perk.guard && !state.guardUsed) {
+    next = player.initialLight * 0.12;
+    state.guardUsed = true;
+  }
+  player.targetLight = next;
   state.calm = 0;
   state.shake = 1;
   burst(hit.x, hit.y);
@@ -338,11 +370,11 @@ function hurt(enemy) {
 function update(dt) {
   state.time += dt;
   const player = state.player;
-  player.y = state.viewH * PLAYER_Y;
-  player.coreRadius = unit() * CORE_FRAC;
+  const perk = perks();
+  player.y = state.viewH * perk.playerY;
+  player.coreRadius = unit() * CORE_FRAC * perk.core;
 
   if (state.mode === "play") {
-    const perk = perks();
     player.x = lerp(player.x, player.targetX, perk.follow, dt);
     player.x = clamp(player.x, player.coreRadius, state.viewW - player.coreRadius);
 
@@ -354,7 +386,7 @@ function update(dt) {
       let spawned = 0;
       while (state.spawnTimer <= 0 && spawned < 3) {
         spawnEnemy();
-        state.spawnTimer += interval;
+        state.spawnTimer += interval * perk.interval;
         spawned += 1;
       }
       state.sparkTimer -= dt;
@@ -372,7 +404,16 @@ function update(dt) {
       for (let i = state.enemies.length - 1; i >= 0; i -= 1) {
         const enemy = state.enemies[i];
         const previousY = enemy.y;
-        enemy.y += speed * dt;
+        if (enemy.homeX != null && (enemy.kind === "shard" || enemy.kind === "grin")) {
+          const amp = enemy.kind === "shard" ? 0.7 : 0.26;
+          const freq = enemy.kind === "shard" ? 2.8 : 1.3;
+          enemy.x = clamp(
+            enemy.homeX + Math.sin(state.time * freq + enemy.phase) * enemy.r * amp,
+            enemy.r,
+            state.viewW - enemy.r,
+          );
+        }
+        enemy.y += speed * perk.speed * dt;
         const body = { ...player, coreRadius: shownCoreRadius(player) };
         if (!state.dying && enemyHitsPlayerSweep(body, enemy, previousY)) {
           const struck = state.enemies.splice(i, 1)[0];
@@ -572,7 +613,8 @@ window.visualViewport?.addEventListener("resize", layout);
 window.addEventListener("contextmenu", (event) => event.preventDefault());
 
 function font(size, weight = 500) {
-  return `${weight} ${Math.round(size)}px "Segoe UI", system-ui, sans-serif`;
+  const face = weight <= 300 ? 100 : weight >= 700 ? 700 : 500;
+  return `${face} ${Math.round(size)}px "Lumina Sans", "Segoe UI", system-ui, sans-serif`;
 }
 
 function setLetterSpacing(px) {
@@ -619,14 +661,14 @@ function drawCore(x, y, radius) {
 
 function traceEnemy(enemy) {
   ctx.beginPath();
-  if (enemy.kind === "diamond") {
-    const points = diamondPoints(enemy.x, enemy.y, enemy.r);
-    ctx.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length; i += 1) ctx.lineTo(points[i].x, points[i].y);
-    ctx.closePath();
+  const points = enemyOutline(enemy);
+  if (!points) {
+    ctx.arc(enemy.x, enemy.y, enemy.r, 0, Math.PI * 2);
     return;
   }
-  ctx.arc(enemy.x, enemy.y, enemy.r, 0, Math.PI * 2);
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i += 1) ctx.lineTo(points[i].x, points[i].y);
+  ctx.closePath();
 }
 
 /** 0 outside the glow, 1 when the light reaches the body. */
@@ -643,9 +685,9 @@ function rgba(color, alpha) {
   return `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${alpha})`;
 }
 
-function drawLitDiamond(enemy, color, beam) {
+function drawLitFaces(enemy, color, beam) {
   const player = state.player;
-  const points = diamondPoints(enemy.x, enemy.y, enemy.r);
+  const points = enemyOutline(enemy);
   for (let i = 0; i < points.length; i += 1) {
     const a = points[i];
     const b = points[(i + 1) % points.length];
@@ -704,10 +746,81 @@ function drawLitOrb(enemy, color, beam) {
   ctx.stroke();
 }
 
-/** Dark body, a faint colored rim in the dark, and faces that catch the player's light. */
+function personaEye(x, y, rx, ry, px, py, color) {
+  ctx.fillStyle = "rgba(244, 252, 255, 0.95)";
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = rgba(color, 0.95);
+  ctx.beginPath();
+  ctx.arc(x + px, y + py, Math.min(rx, ry) * 0.7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#07090f";
+  ctx.beginPath();
+  ctx.arc(x + px, y + py, Math.min(rx, ry) * 0.34, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawPersona(enemy, color, beam) {
+  const reveal = clamp((beam - 0.14) / 0.5, 0, 1);
+  if (reveal <= 0) return;
+  const player = state.player;
+  const dx = player.x - enemy.x;
+  const dy = player.y - enemy.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  const look = enemy.r * 0.12;
+  const ox = (dx / dist) * look;
+  const oy = (dy / dist) * look;
+  const r = enemy.r;
+  ctx.save();
+  traceEnemy(enemy);
+  ctx.clip();
+  ctx.globalAlpha = reveal;
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "rgba(244, 252, 255, 0.9)";
+  ctx.lineWidth = Math.max(1.5, r * 0.07);
+  if (enemy.kind === "diamond") {
+    personaEye(enemy.x - r * 0.22, enemy.y - r * 0.04, r * 0.14, r * 0.07, ox * 0.4, oy * 0.2, color);
+    personaEye(enemy.x + r * 0.22, enemy.y - r * 0.04, r * 0.14, r * 0.07, ox * 0.4, oy * 0.2, color);
+    ctx.beginPath();
+    ctx.moveTo(enemy.x - r * 0.38, enemy.y - r * 0.24);
+    ctx.lineTo(enemy.x - r * 0.06, enemy.y - r * 0.12);
+    ctx.moveTo(enemy.x + r * 0.38, enemy.y - r * 0.24);
+    ctx.lineTo(enemy.x + r * 0.06, enemy.y - r * 0.12);
+    ctx.strokeStyle = "#07090f";
+    ctx.stroke();
+  } else if (enemy.kind === "shard") {
+    personaEye(enemy.x - r * 0.2, enemy.y + r * 0.02, r * 0.15, r * 0.15, ox * 0.35, oy * 0.2, color);
+    personaEye(enemy.x + r * 0.2, enemy.y + r * 0.02, r * 0.15, r * 0.15, ox * 0.35, oy * 0.2, color);
+    ctx.beginPath();
+    ctx.arc(enemy.x, enemy.y + r * 0.34, r * 0.09, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (enemy.kind === "lantern") {
+    personaEye(enemy.x, enemy.y, r * 0.4, r * 0.4, ox * 1.3, oy * 1.3, color);
+  } else if (enemy.kind === "grin") {
+    ctx.beginPath();
+    ctx.arc(enemy.x - r * 0.3, enemy.y - r * 0.02, r * 0.13, Math.PI * 1.15, Math.PI * 1.85);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(enemy.x + r * 0.3, enemy.y - r * 0.02, r * 0.13, Math.PI * 1.15, Math.PI * 1.85);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(enemy.x, enemy.y + r * 0.02, r * 0.3, Math.PI * 0.15, Math.PI * 0.85);
+    ctx.stroke();
+  } else {
+    personaEye(enemy.x + ox * 0.15, enemy.y + oy * 0.1, r * 0.32, r * 0.15, ox * 0.55, oy * 0.25, color);
+    ctx.beginPath();
+    ctx.arc(enemy.x, enemy.y + r * 0.36, r * 0.16, Math.PI * 0.15, Math.PI * 0.85);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Dark body, a faint colored rim in the dark, and a face that appears in the light. */
 function drawEnemy(enemy) {
   const color = TINTS[enemy.tint] ?? TINTS.rose;
   const beam = beamOn(enemy);
+  const rim = perks().rim + (enemy.kind === "lantern" ? 0.08 * Math.sin(state.time * 2.2 + (enemy.phase || 0)) : 0);
   ctx.save();
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
@@ -715,15 +828,16 @@ function drawEnemy(enemy) {
   ctx.fillStyle = "#05070f";
   ctx.fill();
   ctx.lineWidth = Math.max(1.75, enemy.r * 0.075);
-  ctx.strokeStyle = rgba(color, 0.58);
+  ctx.strokeStyle = rgba(color, clamp(rim, 0, 1));
   ctx.shadowColor = rgba(color, 0.55);
-  ctx.shadowBlur = 7;
+  ctx.shadowBlur = enemy.kind === "lantern" ? 12 : 7;
   ctx.stroke();
   ctx.shadowBlur = 0;
   if (beam > 0.03) {
-    if (enemy.kind === "diamond") drawLitDiamond(enemy, color, beam);
+    if (enemyOutline(enemy)) drawLitFaces(enemy, color, beam);
     else drawLitOrb(enemy, color, beam);
   }
+  drawPersona(enemy, color, beam);
   ctx.restore();
 }
 
@@ -750,11 +864,12 @@ function drawScore() {
 }
 
 function treeMetrics() {
-  const pitchX = Math.min(92, state.viewW * 0.23);
-  const pitchY = Math.min(84, state.viewH * 0.105);
-  const node = Math.min(54, pitchX * 0.58);
-  const originX = (state.viewW - pitchX * 3) / 2 + state.treePanX;
-  const originY = state.safeTop + state.viewH * 0.14 + state.treePanY;
+  const spanX = 4;
+  const pitchX = Math.min(84, (state.viewW - 24) / (spanX + 0.62));
+  const pitchY = Math.min(78, state.viewH * 0.096);
+  const node = Math.min(50, pitchX * 0.56);
+  const originX = (state.viewW - pitchX * spanX) / 2 + state.treePanX;
+  const originY = state.safeTop + state.viewH * 0.15 + state.treePanY;
   return { pitchX, pitchY, node, originX, originY };
 }
 
@@ -950,6 +1065,54 @@ function drawIcon(icon, x, y, size, color) {
     ctx.moveTo(s * 0.05, -s * 0.5);
     ctx.lineTo(s * 0.65, -s * 0.5);
     ctx.stroke();
+  } else if (icon === "core") {
+    ctx.arc(0, 0, s * 0.78, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, s * 0.28, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (icon === "beacon") {
+    ctx.moveTo(0, s * 0.9);
+    ctx.lineTo(0, -s * 0.05);
+    ctx.moveTo(-s * 0.62, -s * 0.05);
+    ctx.lineTo(0, -s * 0.85);
+    ctx.lineTo(s * 0.62, -s * 0.05);
+    ctx.stroke();
+  } else if (icon === "eye") {
+    ctx.ellipse(0, 0, s * 0.9, s * 0.52, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, s * 0.24, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (icon === "heart") {
+    ctx.moveTo(0, s * 0.72);
+    ctx.bezierCurveTo(-s * 1.15, -s * 0.05, -s * 0.55, -s * 0.95, 0, -s * 0.38);
+    ctx.bezierCurveTo(s * 0.55, -s * 0.95, s * 1.15, -s * 0.05, 0, s * 0.72);
+    ctx.closePath();
+    ctx.stroke();
+  } else if (icon === "slow") {
+    ctx.moveTo(-s * 0.45, -s * 0.7);
+    ctx.lineTo(s * 0.45, -s * 0.7);
+    ctx.lineTo(0, -s * 0.05);
+    ctx.closePath();
+    ctx.moveTo(-s * 0.45, s * 0.7);
+    ctx.lineTo(s * 0.45, s * 0.7);
+    ctx.lineTo(0, s * 0.05);
+    ctx.closePath();
+    ctx.stroke();
+  } else if (icon === "gap") {
+    ctx.moveTo(-s * 0.85, 0);
+    ctx.lineTo(-s * 0.25, 0);
+    ctx.moveTo(s * 0.25, 0);
+    ctx.lineTo(s * 0.85, 0);
+    ctx.stroke();
+  } else if (icon === "prism") {
+    ctx.moveTo(0, -s * 0.8);
+    ctx.lineTo(s * 0.7, 0);
+    ctx.lineTo(0, s * 0.8);
+    ctx.lineTo(-s * 0.7, 0);
+    ctx.closePath();
+    ctx.stroke();
   }
   ctx.restore();
 }
@@ -1033,27 +1196,92 @@ function drawTree() {
   drawPill(buy, label, accent);
 }
 
-function drawMenu() {
-  const pulse = 1 + Math.sin(state.time * 2.4) * 0.08;
-  const x = state.viewW / 2;
-  const y = state.viewH * 0.44;
-  drawGlow(x, y, unit() * LIGHT_FRAC * pulse, 1);
-  drawCore(x, y, unit() * CORE_FRAC);
+let lightLayer = null;
 
-  ctx.fillStyle = "#f4feff";
-  ctx.font = font(Math.max(40, unit() * 0.12), 300);
+function lightLayerContext() {
+  if (!lightLayer) lightLayer = document.createElement("canvas");
+  const width = Math.max(1, Math.ceil(state.viewW));
+  const height = Math.max(1, Math.ceil(state.viewH));
+  if (lightLayer.width !== width || lightLayer.height !== height) {
+    lightLayer.width = width;
+    lightLayer.height = height;
+  }
+  const layer = lightLayer.getContext("2d");
+  layer.setTransform(1, 0, 0, 1, 0, 0);
+  layer.globalCompositeOperation = "source-over";
+  layer.clearRect(0, 0, width, height);
+  return layer;
+}
+
+/** A faint letter in the dark, and the same letter caught by the ball's light. */
+function drawTextInLight(text, x, y, size, weight, tracking, lightX, lightY, radius, ghost, litWeight = 700) {
+  ctx.save();
+  ctx.font = font(size, weight);
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  setLetterSpacing(Math.round(unit() * 0.014));
-  ctx.fillText("LUMINA", x, state.viewH * 0.18);
-  setLetterSpacing(0);
+  setLetterSpacing(tracking);
+  ctx.lineWidth = Math.max(1, size * 0.035);
+  ctx.strokeStyle = `rgba(186, 214, 228, ${ghost})`;
+  ctx.strokeText(text, x, y);
+  ctx.restore();
 
-  const blink = 0.45 + Math.sin(state.time * 3) * 0.35;
-  ctx.globalAlpha = 0.4 + blink;
-  ctx.fillStyle = "rgba(190, 248, 255, 0.92)";
-  ctx.font = font(Math.max(16, unit() * 0.042), 500);
-  ctx.fillText("Toque para jogar", x, state.viewH * 0.62);
-  ctx.globalAlpha = 1;
+  const layer = lightLayerContext();
+  layer.font = font(size, litWeight);
+  layer.textAlign = "center";
+  layer.textBaseline = "middle";
+  if ("letterSpacing" in layer) layer.letterSpacing = `${tracking}px`;
+  layer.fillStyle = "#f7feff";
+  layer.shadowColor = "rgba(186, 244, 255, 0.95)";
+  layer.shadowBlur = size * 0.28;
+  layer.fillText(text, x, y);
+  layer.shadowBlur = 0;
+  layer.globalCompositeOperation = "destination-in";
+  const glow = layer.createRadialGradient(lightX, lightY, radius * 0.02, lightX, lightY, radius);
+  glow.addColorStop(0, "rgba(255,255,255,1)");
+  glow.addColorStop(0.34, "rgba(255,255,255,1)");
+  glow.addColorStop(0.58, "rgba(255,255,255,0.35)");
+  glow.addColorStop(0.78, "rgba(255,255,255,0)");
+  glow.addColorStop(1, "rgba(255,255,255,0)");
+  layer.fillStyle = glow;
+  layer.fillRect(0, 0, lightLayer.width, lightLayer.height);
+  ctx.drawImage(lightLayer, 0, 0);
+}
+
+function drawMenu() {
+  const pulse = 1 + Math.sin(state.time * 2.2) * 0.1;
+  const x = state.viewW / 2;
+  const y = state.viewH * 0.4 + Math.sin(state.time * 0.7) * unit() * 0.012;
+  const radius = unit() * LIGHT_FRAC * pulse;
+  drawGlow(x, y, radius, 1);
+
+  const titleSize = Math.max(46, unit() * 0.145);
+  drawTextInLight(
+    "LUMINA",
+    x,
+    y - titleSize * 0.08,
+    titleSize,
+    100,
+    Math.round(titleSize * 0.08),
+    x,
+    y,
+    radius * 1.25,
+    0.55,
+  );
+  drawCore(x, y, unit() * CORE_FRAC);
+
+  const hintSize = Math.max(17, unit() * 0.044);
+  drawTextInLight(
+    "Toque para jogar",
+    x,
+    y + radius * 0.5,
+    hintSize,
+    400,
+    Math.round(hintSize * 0.04),
+    x,
+    y,
+    radius * 1.05,
+    0.28,
+  );
 
   if (state.highScore > 0) {
     ctx.fillStyle = "rgba(255, 255, 255, 0.55)";
@@ -1171,6 +1399,9 @@ function frame(now) {
 }
 
 layout();
+document.fonts?.load('100 64px "Lumina Sans"');
+document.fonts?.load('500 28px "Lumina Sans"');
+document.fonts?.load('700 64px "Lumina Sans"');
 announce(state.highScore > 0 ? `Toque para jogar. Recorde ${state.highScore}.` : "Toque para jogar.");
 state.last = performance.now();
 requestAnimationFrame(frame);

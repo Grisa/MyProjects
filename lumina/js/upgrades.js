@@ -32,6 +32,16 @@ export const UPGRADES = [
     icon: "reflex",
   },
   {
+    id: "miolo",
+    name: "Miolo",
+    text: "O núcleo encolhe e a bolinha sobe.",
+    cost: 4,
+    col: 0,
+    row: 0,
+    requires: ["reflexo"],
+    icon: "core",
+  },
+  {
     id: "halo",
     name: "Halo",
     text: "Você começa com mais luz.",
@@ -52,6 +62,26 @@ export const UPGRADES = [
     icon: "sun",
   },
   {
+    id: "farol",
+    name: "Farol",
+    text: "A luz alcança mais longe.",
+    cost: 5,
+    col: 2,
+    row: 0,
+    requires: ["aurora"],
+    icon: "beacon",
+  },
+  {
+    id: "vela",
+    name: "Vela",
+    text: "A borda das sombras aparece antes.",
+    cost: 3,
+    col: 3,
+    row: 0,
+    requires: ["farol"],
+    icon: "eye",
+  },
+  {
     id: "casco",
     name: "Casco",
     text: "Cada batida apaga menos luz.",
@@ -70,6 +100,36 @@ export const UPGRADES = [
     row: 2,
     requires: ["casco"],
     icon: "wall",
+  },
+  {
+    id: "respiro",
+    name: "Respiro",
+    text: "Um golpe fatal deixa um fio de luz.",
+    cost: 6,
+    col: 3,
+    row: 1,
+    requires: ["muralha"],
+    icon: "heart",
+  },
+  {
+    id: "pausa",
+    name: "Pausa",
+    text: "Os inimigos caem mais devagar.",
+    cost: 3,
+    col: 3,
+    row: 3,
+    requires: ["muralha"],
+    icon: "slow",
+  },
+  {
+    id: "folga",
+    name: "Folga",
+    text: "Os inimigos demoram mais a nascer.",
+    cost: 4,
+    col: 4,
+    row: 2,
+    requires: ["muralha"],
+    icon: "gap",
   },
   {
     id: "folego",
@@ -121,6 +181,16 @@ export const UPGRADES = [
     requires: ["ima"],
     icon: "double",
   },
+  {
+    id: "prisma",
+    name: "Prisma",
+    text: "Cada faísca também vale 1 ponto.",
+    cost: 4,
+    col: 2,
+    row: 4,
+    requires: ["brasa"],
+    icon: "prism",
+  },
 ];
 
 export function upgradeById(id) {
@@ -143,6 +213,7 @@ export function bonuses(owned) {
   let light = 1;
   if (has("halo")) light += 0.18;
   if (has("aurora")) light += 0.18;
+  if (has("farol")) light += 0.16;
 
   let damage = 0.38;
   if (has("casco")) damage = 0.3;
@@ -160,7 +231,14 @@ export function bonuses(owned) {
     magnet: has("vortice") ? 0.46 : has("ima") ? 0.24 : 0,
     sparkInterval: has("abundancia") ? 3.2 : 5,
     sparkValue: has("brasa") ? 2 : 1,
+    sparkScore: has("prisma") ? 1 : 0,
     regen: has("folego") ? 0.045 : 0,
     calmDelay: 5,
+    core: has("miolo") ? 0.78 : 1,
+    playerY: has("miolo") ? 0.785 : 0.82,
+    rim: has("vela") ? 0.92 : 0.58,
+    guard: has("respiro"),
+    speed: has("pausa") ? 0.88 : 1,
+    interval: has("folga") ? 1.18 : 1,
   };
 }

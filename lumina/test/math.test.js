@@ -12,6 +12,7 @@ import {
   distPointToSegmentSq,
   enemyHitsPlayer,
   enemyHitsPlayerSweep,
+  enemyOutline,
   lerp,
   pointInConvexPolygon,
 } from "../js/math.js";
@@ -61,6 +62,16 @@ test("light catches the diamond face turned toward it", () => {
   const top = edgeFacing(points[0].x, points[0].y, points[1].x, points[1].y, 0, 0, 0, 200);
   assert.ok(bottom > 0.4);
   assert.ok(top < 0);
+});
+
+test("each silhouette contains its center and misses a clear miss", () => {
+  const player = { x: 80, y: 80, coreRadius: 6 };
+  for (const kind of ["shard", "lantern", "grin", "diamond"]) {
+    const enemy = { kind, x: 80, y: 80, r: 30 };
+    assert.equal(pointInConvexPolygon(80, 80, enemyOutline(enemy)), true);
+    assert.equal(enemyHitsPlayer(player, enemy), true);
+    assert.equal(enemyHitsPlayer({ x: 80, y: 220, coreRadius: 6 }, enemy), false);
+  }
 });
 
 test("enemy hit test uses the core, not the glow", () => {

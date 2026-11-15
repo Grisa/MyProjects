@@ -81,6 +81,40 @@ export function diamondPoints(x, y, r) {
   ];
 }
 
+/** Convex outline for every enemy that is not a circle. Null means a round body. */
+export function enemyOutline(enemy) {
+  const { x, y, r, kind } = enemy;
+  if (kind === "diamond") return diamondPoints(x, y, r);
+  if (kind === "shard") {
+    return [
+      { x, y: y - r * 0.9 },
+      { x: x + r * 0.78, y: y + r * 0.68 },
+      { x: x - r * 0.78, y: y + r * 0.68 },
+    ];
+  }
+  if (kind === "lantern") {
+    const points = [];
+    for (let i = 0; i < 6; i += 1) {
+      const angle = -Math.PI / 2 + (Math.PI * 2 * i) / 6;
+      points.push({ x: x + Math.cos(angle) * r * 0.9, y: y + Math.sin(angle) * r * 0.9 });
+    }
+    return points;
+  }
+  if (kind === "grin") {
+    const w = r * 0.92;
+    const h = r * 0.52;
+    return [
+      { x: x - w * 0.42, y: y - h },
+      { x: x + w * 0.42, y: y - h },
+      { x: x + w, y },
+      { x: x + w * 0.42, y: y + h },
+      { x: x - w * 0.42, y: y + h },
+      { x: x - w, y },
+    ];
+  }
+  return null;
+}
+
 /**
  * How directly a light hits one edge of a shape. 1 is face-on, 0 is grazing,
  * negative means the edge points away from the light.
@@ -104,14 +138,8 @@ export function edgeFacing(ax, ay, bx, by, cx, cy, lightX, lightY) {
 }
 
 export function enemyHitsPlayer(player, enemy) {
-  if (enemy.kind === "diamond") {
-    return circleHitsPolygon(
-      player.x,
-      player.y,
-      player.coreRadius,
-      diamondPoints(enemy.x, enemy.y, enemy.r),
-    );
-  }
+  const points = enemyOutline(enemy);
+  if (points) return circleHitsPolygon(player.x, player.y, player.coreRadius, points);
   return circlesOverlap(player.x, player.y, player.coreRadius, enemy.x, enemy.y, enemy.r);
 }
 
