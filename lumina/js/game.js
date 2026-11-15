@@ -1,5 +1,6 @@
 import {
   applyDamage,
+  circlesOverlap,
   clamp,
   diamondPoints,
   difficultyAt,
@@ -7,8 +8,11 @@ import {
   enemyHitsPlayerSweep,
   lerp,
 } from "./math.js";
+import { UPGRADES, bonuses, canBuy, nodeState, upgradeById } from "./upgrades.js";
 
 const HIGH_SCORE_KEY = "lumina-high-score";
+const SPARKS_KEY = "lumina-sparks";
+const UPGRADES_KEY = "lumina-upgrades";
 const PORTRAIT = 9 / 16;
 const PLAYER_Y = 0.82;
 const CORE_FRAC = 0.028;
@@ -33,7 +37,15 @@ const state = {
   elapsed: 0,
   score: 0,
   highScore: loadHighScore(),
+  sparks: loadSparks(),
+  owned: loadOwned(),
+  selectedId: "centelha",
+  treePanX: 0,
+  treePanY: 0,
+  gesture: null,
   spawnTimer: 0,
+  sparkTimer: 0,
+  calm: 0,
   shake: 0,
   dying: false,
   width: 0,
@@ -46,7 +58,9 @@ const state = {
   safeTop: 0,
   player: null,
   enemies: [],
+  orbs: [],
   particles: [],
+  floaters: [],
   pointerId: null,
   announced: "",
 };
@@ -58,6 +72,38 @@ function loadHighScore() {
   } catch {
     return 0;
   }
+}
+
+function loadSparks() {
+  try {
+    const value = Number(localStorage.getItem(SPARKS_KEY));
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function loadOwned() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(UPGRADES_KEY) || "[]");
+    const ids = Array.isArray(raw) ? raw.filter((id) => upgradeById(id)) : [];
+    return new Set(ids);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveProgress() {
+  try {
+    localStorage.setItem(SPARKS_KEY, String(state.sparks));
+    localStorage.setItem(UPGRADES_KEY, JSON.stringify([...state.owned]));
+  } catch {
+    /* The run still keeps the sparks in memory. */
+  }
+}
+
+function perks() {
+  return bonuses(state.owned);
 }
 
 function saveHighScore(score) {
@@ -82,7 +128,7 @@ function shownCoreRadius(player) {
 
 function makePlayer(x) {
   const core = unit() * CORE_FRAC;
-  const light = unit() * LIGHT_FRAC;
+  const light = unit() * LIGHT_FRAC * perks().light;
   const clamped = clamp(x, core, Math.max(core, state.viewW - core));
   return {
     x: clamped,
@@ -152,12 +198,21 @@ function layout() {
     enemy.y *= sy;
     enemy.r *= sy;
   }
+  for (const orb of state.orbs) {
+    orb.x *= sx;
+    orb.y *= sy;
+    orb.r *= sy;
+  }
   for (const particle of state.particles) {
     particle.x *= sx;
     particle.y *= sy;
     particle.vx *= sx;
     particle.vy *= sy;
     particle.radius *= sy;
+  }
+  for (const floater of state.floaters) {
+    floater.x *= sx;
+    floater.y *= sy;
   }
 }
 
@@ -170,10 +225,14 @@ function announce(text) {
 function resetRun(pointerX) {
   state.player = makePlayer(Number.isFinite(pointerX) ? pointerX : state.viewW / 2);
   state.enemies = [];
+  state.orbs = [];
   state.particles = [];
+  state.floaters = [];
   state.score = 0;
   state.elapsed = 0;
   state.spawnTimer = 0.45;
+  state.sparkTimer = 1.5;
+  state.calm = 0;
   state.shake = 0;
   state.dying = false;
   state.mode = "play";
@@ -214,6 +273,31 @@ function spawnEnemy() {
   });
 }
 
+function spawnSpark() {
+  const r = clamp(state.viewH * 0.018, 8, state.viewW * 0.05);
+  const margin = r + 10;
+  const span = Math.max(1, state.viewW - margin * 2);
+  state.orbs.push({
+    x: margin + Math.random() * span,
+    y: -r * 4,
+    r,
+  });
+}
+
+function popup(x, y, text) {
+  state.floaters.push({ x, y, text, age: 0, life: 0.75 });
+}
+
+function collectSpark(orb) {
+  const gained = perks().sparkValue;
+  state.sparks += gained;
+  saveProgress();
+  const player = state.player;
+  player.targetLight = Math.min(player.initialLight, player.targetLight + player.initialLight * perks().heal);
+  if (player.targetLight > 0) state.dying = false;
+  popup(orb.x, orb.y, `+${gained}`);
+}
+
 function burst(x, y) {
   const count = 16;
   for (let i = 0; i < count; i += 1) {
@@ -244,7 +328,8 @@ function impactPoint(player, enemy) {
 function hurt(enemy) {
   const player = state.player;
   const hit = impactPoint(player, enemy);
-  player.targetLight = applyDamage(player.targetLight, player.initialLight);
+  player.targetLight = applyDamage(player.targetLight, player.initialLight, perks().damage);
+  state.calm = 0;
   state.shake = 1;
   burst(hit.x, hit.y);
   if (player.targetLight === 0) state.dying = true;
@@ -257,11 +342,13 @@ function update(dt) {
   player.coreRadius = unit() * CORE_FRAC;
 
   if (state.mode === "play") {
-    player.x = lerp(player.x, player.targetX, FOLLOW, dt);
+    const perk = perks();
+    player.x = lerp(player.x, player.targetX, perk.follow, dt);
     player.x = clamp(player.x, player.coreRadius, state.viewW - player.coreRadius);
 
     if (!state.dying) {
       state.elapsed += dt;
+      state.calm += dt;
       const { speed, interval } = difficultyAt(state.elapsed, state.viewH);
       state.spawnTimer -= dt;
       let spawned = 0;
@@ -269,6 +356,17 @@ function update(dt) {
         spawnEnemy();
         state.spawnTimer += interval;
         spawned += 1;
+      }
+      state.sparkTimer -= dt;
+      if (state.sparkTimer <= 0) {
+        spawnSpark();
+        state.sparkTimer += perk.sparkInterval;
+      }
+      if (perk.regen > 0 && state.calm >= perk.calmDelay && player.targetLight < player.initialLight) {
+        player.targetLight = Math.min(
+          player.initialLight,
+          player.targetLight + player.initialLight * perk.regen * dt,
+        );
       }
 
       for (let i = state.enemies.length - 1; i >= 0; i -= 1) {
@@ -288,6 +386,34 @@ function update(dt) {
             announce(`Pontos ${state.score}`);
           }
         }
+      }
+
+      const magnet = perk.magnet * state.viewH;
+      for (let i = state.orbs.length - 1; i >= 0; i -= 1) {
+        const orb = state.orbs[i];
+        const previousY = orb.y;
+        orb.y += speed * dt;
+        if (magnet > 0) {
+          const dx = player.x - orb.x;
+          const dy = player.y - orb.y;
+          const distance = Math.hypot(dx, dy);
+          if (distance < magnet && distance > 1) {
+            const pull = state.viewH * 0.55 * dt;
+            orb.x += (dx / distance) * pull;
+            orb.y += (dy / distance) * pull * 0.35;
+          }
+        }
+        const reach = shownCoreRadius(player) * 1.35;
+        const caught = circlesOverlap(player.x, player.y, reach, orb.x, orb.y, orb.r)
+          || (player.y >= Math.min(previousY, orb.y)
+            && player.y <= Math.max(previousY, orb.y)
+            && circlesOverlap(player.x, player.y, reach, orb.x, player.y, orb.r));
+        if (caught) {
+          const taken = state.orbs.splice(i, 1)[0];
+          collectSpark(taken);
+          continue;
+        }
+        if (orb.y - orb.r > state.viewH) state.orbs.splice(i, 1);
       }
     }
 
@@ -309,6 +435,13 @@ function update(dt) {
     particle.vx *= 0.985;
     particle.vy *= 0.985;
   }
+
+  for (let i = state.floaters.length - 1; i >= 0; i -= 1) {
+    const floater = state.floaters[i];
+    floater.age += dt;
+    floater.y -= 36 * dt;
+    if (floater.age >= floater.life) state.floaters.splice(i, 1);
+  }
 }
 
 function playfieldPoint(clientX, clientY) {
@@ -319,20 +452,19 @@ function playfieldPoint(clientX, clientY) {
   };
 }
 
-function buttonRect() {
+function buttonRect(yFraction = 0.58) {
   const w = Math.min(state.viewW * 0.74, 320);
-  const h = Math.max(56, unit() * 0.1);
+  const h = Math.max(52, unit() * 0.09);
   return {
     x: (state.viewW - w) / 2,
-    y: state.viewH * 0.62,
+    y: state.viewH * yFraction,
     w,
     h,
   };
 }
 
-function insideButton(x, y) {
-  const button = buttonRect();
-  return x >= button.x && x <= button.x + button.w && y >= button.y && y <= button.y + button.h;
+function insideRect(x, y, rect) {
+  return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
 }
 
 function aim(x) {
@@ -354,13 +486,32 @@ function onPointerDown(event) {
   event.preventDefault();
   const point = playfieldPoint(event.clientX, event.clientY);
   if (state.mode === "menu") {
+    if (insideRect(point.x, point.y, buttonRect(0.8))) {
+      openTree();
+      return;
+    }
     resetRun(point.x);
     capturePointer(event);
     return;
   }
   if (state.mode === "over") {
-    if (!insideButton(point.x, point.y)) return;
-    resetRun(point.x);
+    if (insideRect(point.x, point.y, buttonRect(0.58))) {
+      resetRun(point.x);
+      capturePointer(event);
+      return;
+    }
+    if (insideRect(point.x, point.y, buttonRect(0.7))) openTree();
+    return;
+  }
+  if (state.mode === "tree") {
+    state.gesture = {
+      id: event.pointerId,
+      x: point.x,
+      y: point.y,
+      sx: point.x,
+      sy: point.y,
+      dragged: false,
+    };
     capturePointer(event);
     return;
   }
@@ -369,12 +520,45 @@ function onPointerDown(event) {
 }
 
 function onPointerMove(event) {
+  const point = playfieldPoint(event.clientX, event.clientY);
+  if (state.mode === "tree" && state.gesture?.id === event.pointerId) {
+    const gesture = state.gesture;
+    if (!gesture.dragged && Math.hypot(point.x - gesture.sx, point.y - gesture.sy) > 12) {
+      gesture.dragged = true;
+    }
+    if (gesture.dragged) {
+      state.treePanX = clamp(state.treePanX + point.x - gesture.x, -180, 180);
+      state.treePanY = clamp(state.treePanY + point.y - gesture.y, -160, 200);
+      gesture.x = point.x;
+      gesture.y = point.y;
+    }
+    return;
+  }
   if (state.mode !== "play" || state.pointerId !== event.pointerId) return;
-  aim(playfieldPoint(event.clientX, event.clientY).x);
+  aim(point.x);
 }
 
 function onPointerUp(event) {
+  if (state.mode === "tree" && state.gesture?.id === event.pointerId) {
+    if (!state.gesture.dragged) onTreeTap(state.gesture.sx, state.gesture.sy);
+    state.gesture = null;
+  }
   if (state.pointerId === event.pointerId) state.pointerId = null;
+}
+
+function openTree() {
+  state.mode = "tree";
+  state.gesture = null;
+  announce(`Melhorias. ${state.sparks} faíscas.`);
+}
+
+function tryBuy(id) {
+  const upgrade = upgradeById(id);
+  if (!upgrade || !canBuy(upgrade, state.owned, state.sparks)) return;
+  state.sparks -= upgrade.cost;
+  state.owned.add(id);
+  saveProgress();
+  announce(`${upgrade.name} comprado. ${state.sparks} faíscas.`);
 }
 
 canvas.addEventListener("pointerdown", onPointerDown);
@@ -565,6 +749,290 @@ function drawScore() {
   ctx.restore();
 }
 
+function treeMetrics() {
+  const pitchX = Math.min(92, state.viewW * 0.23);
+  const pitchY = Math.min(84, state.viewH * 0.105);
+  const node = Math.min(54, pitchX * 0.58);
+  const originX = (state.viewW - pitchX * 3) / 2 + state.treePanX;
+  const originY = state.safeTop + state.viewH * 0.14 + state.treePanY;
+  return { pitchX, pitchY, node, originX, originY };
+}
+
+function nodePoint(upgrade, metrics = treeMetrics()) {
+  return {
+    x: metrics.originX + upgrade.col * metrics.pitchX,
+    y: metrics.originY + upgrade.row * metrics.pitchY,
+  };
+}
+
+function nodeBox(upgrade, metrics = treeMetrics()) {
+  const center = nodePoint(upgrade, metrics);
+  const node = metrics.node;
+  return {
+    x: center.x - node / 2,
+    y: center.y - node / 2,
+    w: node,
+    h: node,
+    cx: center.x,
+    cy: center.y,
+  };
+}
+
+function detailCard() {
+  const h = Math.max(118, unit() * 0.2);
+  return { x: 14, y: state.viewH - h - 16, w: state.viewW - 28, h };
+}
+
+function buyRect() {
+  const card = detailCard();
+  return { x: card.x + 14, y: card.y + card.h - 48, w: card.w - 28, h: 36 };
+}
+
+function backRect() {
+  return { x: 16, y: Math.max(12, state.safeTop + 8), w: 92, h: 36 };
+}
+
+function onTreeTap(x, y) {
+  if (insideRect(x, y, backRect())) {
+    state.mode = "menu";
+    announce(state.highScore > 0 ? `Toque para jogar. Recorde ${state.highScore}.` : "Toque para jogar.");
+    return;
+  }
+  const selected = upgradeById(state.selectedId);
+  if (selected && insideRect(x, y, buyRect())) {
+    tryBuy(selected.id);
+    return;
+  }
+  const metrics = treeMetrics();
+  for (const upgrade of UPGRADES) {
+    if (insideRect(x, y, nodeBox(upgrade, metrics))) {
+      state.selectedId = upgrade.id;
+      announce(`${upgrade.name}. ${upgrade.text}`);
+      return;
+    }
+  }
+}
+
+function drawPill(rect, label, accent) {
+  ctx.save();
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 1.5;
+  ctx.shadowColor = accent;
+  ctx.shadowBlur = 12;
+  roundRect(rect.x, rect.y, rect.w, rect.h, rect.h / 2);
+  ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle = "#e9fdff";
+  ctx.font = font(Math.max(15, unit() * 0.038), 600);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(label, rect.x + rect.w / 2, rect.y + rect.h / 2);
+}
+
+function drawSparkGlyph(x, y, radius) {
+  const glow = ctx.createRadialGradient(x, y, 0, x, y, radius * 3.1);
+  glow.addColorStop(0, "rgba(255, 236, 186, 0.95)");
+  glow.addColorStop(0.4, "rgba(255, 186, 72, 0.28)");
+  glow.addColorStop(1, "rgba(255, 170, 40, 0)");
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(x, y, radius * 3.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#fff4d2";
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawSparkCount(x, y, align = "left") {
+  ctx.save();
+  ctx.textAlign = align;
+  ctx.textBaseline = "middle";
+  ctx.font = font(Math.max(15, unit() * 0.038), 600);
+  ctx.fillStyle = "rgba(255, 228, 170, 0.92)";
+  const text = String(state.sparks);
+  if (align === "left") {
+    drawSparkGlyph(x + 7, y, 5);
+    ctx.fillText(text, x + 20, y);
+  } else {
+    ctx.fillText(text, x - 16, y);
+    drawSparkGlyph(x, y, 5);
+  }
+  ctx.restore();
+}
+
+function drawIcon(icon, x, y, size, color) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = Math.max(1.6, size * 0.08);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  const s = size * 0.34;
+  ctx.translate(x, y);
+  ctx.beginPath();
+  if (icon === "spark" || icon === "double") {
+    ctx.arc(0, 0, s * 0.45, 0, Math.PI * 2);
+    ctx.fill();
+    if (icon === "double") ctx.fillText("+", s * 0.7, s * 0.15);
+  } else if (icon === "halo" || icon === "sun") {
+    ctx.arc(0, 0, s * 0.55, 0, Math.PI * 2);
+    ctx.stroke();
+    if (icon === "sun") {
+      ctx.beginPath();
+      for (let i = 0; i < 6; i += 1) {
+        const angle = (Math.PI * 2 * i) / 6;
+        ctx.moveTo(Math.cos(angle) * s * 0.8, Math.sin(angle) * s * 0.8);
+        ctx.lineTo(Math.cos(angle) * s * 1.15, Math.sin(angle) * s * 1.15);
+      }
+      ctx.stroke();
+    }
+  } else if (icon === "shield" || icon === "wall") {
+    ctx.moveTo(0, -s);
+    ctx.lineTo(s * 0.85, -s * 0.45);
+    ctx.lineTo(s * 0.7, s * 0.45);
+    ctx.lineTo(0, s);
+    ctx.lineTo(-s * 0.7, s * 0.45);
+    ctx.lineTo(-s * 0.85, -s * 0.45);
+    ctx.closePath();
+    ctx.stroke();
+    if (icon === "wall") {
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.35, 0);
+      ctx.lineTo(s * 0.35, 0);
+      ctx.moveTo(0, -s * 0.35);
+      ctx.lineTo(0, s * 0.35);
+      ctx.stroke();
+    }
+  } else if (icon === "step" || icon === "reflex") {
+    ctx.moveTo(-s, 0);
+    ctx.lineTo(s * 0.2, 0);
+    ctx.moveTo(s * 0.15, -s * 0.45);
+    ctx.lineTo(s, 0);
+    ctx.lineTo(s * 0.15, s * 0.45);
+    ctx.stroke();
+    if (icon === "reflex") {
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.2, -s * 0.55);
+      ctx.lineTo(s * 0.55, -s * 0.55);
+      ctx.lineTo(s * 0.2, -s);
+      ctx.moveTo(s * 0.55, -s * 0.55);
+      ctx.lineTo(s * 0.2, -s * 0.1);
+      ctx.stroke();
+    }
+  } else if (icon === "magnet") {
+    ctx.arc(0, s * 0.15, s * 0.7, Math.PI, 0);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.7, s * 0.15);
+    ctx.lineTo(-s * 0.7, s * 0.85);
+    ctx.moveTo(s * 0.7, s * 0.15);
+    ctx.lineTo(s * 0.7, s * 0.85);
+    ctx.stroke();
+  } else if (icon === "vortex") {
+    ctx.arc(0, 0, s * 0.85, 0.4, Math.PI * 1.7);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, s * 0.4, 0, Math.PI * 1.4);
+    ctx.stroke();
+  } else if (icon === "coins") {
+    ctx.arc(-s * 0.28, 0, s * 0.48, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(s * 0.32, s * 0.1, s * 0.48, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (icon === "breath") {
+    ctx.arc(-s * 0.15, s * 0.1, s * 0.62, 0.2, Math.PI * 1.7);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(s * 0.35, -s * 0.85);
+    ctx.lineTo(s * 0.35, -s * 0.15);
+    ctx.moveTo(s * 0.05, -s * 0.5);
+    ctx.lineTo(s * 0.65, -s * 0.5);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawTree() {
+  const metrics = treeMetrics();
+  const card = detailCard();
+  ctx.fillStyle = "#f4feff";
+  ctx.font = font(Math.max(22, unit() * 0.055), 500);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("Melhorias", state.viewW / 2, backRect().y + 18);
+  drawSparkCount(state.viewW - 28, backRect().y + 18, "right");
+  drawPill(backRect(), "Voltar", "rgba(190, 248, 255, 0.7)");
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, backRect().y + 44, state.viewW, card.y - backRect().y - 52);
+  ctx.clip();
+
+  for (const upgrade of UPGRADES) {
+    const child = nodePoint(upgrade, metrics);
+    for (const parentId of upgrade.requires) {
+      const parent = nodePoint(upgradeById(parentId), metrics);
+      const childState = nodeState(upgrade, state.owned);
+      ctx.strokeStyle = childState === "owned"
+        ? "rgba(61, 222, 106, 0.85)"
+        : childState === "available"
+          ? "rgba(255, 216, 74, 0.8)"
+          : "rgba(120, 36, 48, 0.9)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(parent.x, parent.y);
+      ctx.lineTo(child.x, child.y);
+      ctx.stroke();
+    }
+  }
+
+  for (const upgrade of UPGRADES) {
+    const box = nodeBox(upgrade, metrics);
+    const status = nodeState(upgrade, state.owned);
+    const border = status === "owned" ? "#3dde6a" : status === "available" ? "#ffd84a" : "#ff3344";
+    const ink = status === "locked" ? "rgba(255, 150, 160, 0.55)" : "#f4fff8";
+    ctx.fillStyle = "#12141c";
+    roundRect(box.x, box.y, box.w, box.h, 10);
+    ctx.fill();
+    ctx.lineWidth = upgrade.id === state.selectedId ? 3.5 : 2.5;
+    ctx.strokeStyle = border;
+    ctx.stroke();
+    drawIcon(upgrade.icon, box.cx, box.cy, box.w, ink);
+  }
+  ctx.restore();
+
+  const selected = upgradeById(state.selectedId) ?? UPGRADES[0];
+  const status = nodeState(selected, state.owned);
+  ctx.fillStyle = "rgba(8, 10, 18, 0.94)";
+  roundRect(card.x, card.y, card.w, card.h, 16);
+  ctx.fill();
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.fillStyle = "#f4feff";
+  ctx.font = font(Math.max(18, unit() * 0.045), 600);
+  ctx.fillText(selected.name, card.x + 16, card.y + 14);
+  ctx.fillStyle = "rgba(210, 226, 236, 0.82)";
+  ctx.font = font(Math.max(14, unit() * 0.034), 500);
+  ctx.fillText(selected.text, card.x + 16, card.y + 42);
+  const buy = buyRect();
+  const affordable = canBuy(selected, state.owned, state.sparks);
+  const label = status === "owned"
+    ? "Comprado"
+    : status === "locked"
+      ? "Bloqueado"
+      : affordable
+        ? `Comprar · ${selected.cost}`
+        : `Precisa de ${selected.cost}`;
+  const accent = status === "owned"
+    ? "rgba(61, 222, 106, 0.9)"
+    : affordable
+      ? "rgba(255, 216, 74, 0.95)"
+      : "rgba(255, 80, 96, 0.75)";
+  drawPill(buy, label, accent);
+}
+
 function drawMenu() {
   const pulse = 1 + Math.sin(state.time * 2.4) * 0.08;
   const x = state.viewW / 2;
@@ -584,14 +1052,16 @@ function drawMenu() {
   ctx.globalAlpha = 0.4 + blink;
   ctx.fillStyle = "rgba(190, 248, 255, 0.92)";
   ctx.font = font(Math.max(16, unit() * 0.042), 500);
-  ctx.fillText("Toque para jogar", x, state.viewH * 0.64);
+  ctx.fillText("Toque para jogar", x, state.viewH * 0.62);
   ctx.globalAlpha = 1;
 
   if (state.highScore > 0) {
     ctx.fillStyle = "rgba(255, 255, 255, 0.55)";
     ctx.font = font(Math.max(14, unit() * 0.036), 500);
-    ctx.fillText(`Recorde ${state.highScore}`, x, state.viewH * 0.72);
+    ctx.fillText(`Recorde ${state.highScore}`, x, state.viewH * 0.7);
   }
+  drawSparkCount(x - 8, state.viewH * 0.755, "right");
+  drawPill(buttonRect(0.8), "Melhorias", "rgba(255, 214, 120, 0.9)");
 }
 
 function roundRect(x, y, w, h, radius) {
@@ -622,9 +1092,10 @@ function drawGameOver() {
 
   ctx.fillStyle = "rgba(190, 248, 255, 0.84)";
   ctx.font = font(Math.max(16, unit() * 0.042), 500);
-  ctx.fillText(`Recorde ${state.highScore}`, x, state.viewH * 0.52);
+  ctx.fillText(`Recorde ${state.highScore}`, x, state.viewH * 0.5);
+  drawSparkCount(x - 8, state.viewH * 0.545, "right");
 
-  const button = buttonRect();
+  const button = buttonRect(0.58);
   ctx.save();
   ctx.strokeStyle = "rgba(126, 249, 255, 0.95)";
   ctx.lineWidth = 1.5;
@@ -636,6 +1107,7 @@ function drawGameOver() {
   ctx.fillStyle = "#e9fdff";
   ctx.font = font(Math.max(16, unit() * 0.04), 600);
   ctx.fillText("Jogar novamente", x, button.y + button.h / 2);
+  drawPill(buttonRect(0.7), "Melhorias", "rgba(255, 214, 120, 0.9)");
 }
 
 function drawPlayerGlow() {
@@ -660,17 +1132,31 @@ function draw() {
 
   if (state.mode === "menu") {
     drawMenu();
+  } else if (state.mode === "tree") {
+    drawTree();
   } else {
     drawPlayerGlow();
     if (state.mode === "play") {
       for (const enemy of state.enemies) drawEnemy(enemy);
+      for (const orb of state.orbs) drawSparkGlyph(orb.x, orb.y, orb.r);
     }
     drawParticles();
+    for (const floater of state.floaters) {
+      const fade = 1 - floater.age / floater.life;
+      ctx.globalAlpha = Math.max(0, fade);
+      ctx.fillStyle = "#ffe2a4";
+      ctx.font = font(Math.max(16, unit() * 0.04), 700);
+      ctx.textAlign = "center";
+      ctx.fillText(floater.text, floater.x, floater.y);
+      ctx.globalAlpha = 1;
+    }
     if (state.player.lightRadius > 2) {
       drawCore(state.player.x, state.player.y, shownCoreRadius(state.player));
     }
-    if (state.mode === "play") drawScore();
-    else drawGameOver();
+    if (state.mode === "play") {
+      drawScore();
+      drawSparkCount(18, Math.max(18, state.safeTop + 18));
+    } else drawGameOver();
   }
 
   ctx.restore();
