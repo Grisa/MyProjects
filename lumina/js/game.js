@@ -2,6 +2,10 @@ import {
   applyDamage,
   circlesOverlap,
   clamp,
+  BLOOM_SCORE,
+  BLOOM_SECONDS,
+  bloomEase,
+  bloomSpan,
   difficultyAt,
   edgeFacing,
   enemyHitsPlayerSweep,
@@ -16,6 +20,7 @@ import {
   getMusicVolume,
   getSfxVolume,
   playBegin,
+  playBloom,
   playBuy,
   playDeath,
   playGraze,
@@ -24,6 +29,7 @@ import {
   playPass,
   playSpark,
   playTap,
+  setForeground,
   setMusicVolume,
   setSfxVolume,
   unlock,
@@ -96,6 +102,10 @@ const state = {
   floaters: [],
   pointerId: null,
   announced: "",
+  span: 1,
+  surgeLeft: 0,
+  opened: false,
+  flash: 0,
 };
 
 function loadHintSeen() {
@@ -177,6 +187,14 @@ function unit() {
   return Math.min(state.viewW, state.viewH);
 }
 
+function fieldW() {
+  return state.viewW * state.span;
+}
+
+function fieldH() {
+  return state.viewH * state.span;
+}
+
 /** The bright core shrinks with the remaining light so a hit is obvious. */
 function shownCoreRadius(player) {
   const health = clamp(player.lightRadius / Math.max(1, player.initialLight), 0, 1);
@@ -187,10 +205,10 @@ function makePlayer(x) {
   const perk = perks();
   const core = unit() * CORE_FRAC * perk.core;
   const light = unit() * LIGHT_FRAC * perk.light;
-  const clamped = clamp(x, core, Math.max(core, state.viewW - core));
+  const clamped = clamp(x, core, Math.max(core, fieldW() - core));
   return {
     x: clamped,
-    y: state.viewH * perk.playerY,
+    y: fieldH() * perk.playerY,
     targetX: clamped,
     coreRadius: core,
     lightRadius: light,
@@ -246,10 +264,10 @@ function layout() {
   player.lightRadius *= sy;
   player.targetLight *= sy;
   player.initialLight *= sy;
-  player.y = state.viewH * perks().playerY;
+  player.y = fieldH() * perks().playerY;
   player.coreRadius = unit() * CORE_FRAC * perks().core;
-  player.x = clamp(player.x, player.coreRadius, state.viewW - player.coreRadius);
-  player.targetX = clamp(player.targetX, player.coreRadius, state.viewW - player.coreRadius);
+  player.x = clamp(player.x, player.coreRadius, fieldW() - player.coreRadius);
+  player.targetX = clamp(player.targetX, player.coreRadius, fieldW() - player.coreRadius);
 
   for (const enemy of state.enemies) {
     enemy.x *= sx;
@@ -282,6 +300,10 @@ function announce(text) {
 }
 
 function resetRun(pointerX) {
+  state.span = 1;
+  state.surgeLeft = 0;
+  state.opened = false;
+  state.flash = 0;
   state.player = makePlayer(Number.isFinite(pointerX) ? pointerX : state.viewW / 2);
   state.enemies = [];
   state.orbs = [];
@@ -342,7 +364,7 @@ function spawnEnemy() {
     state.viewW * 0.18,
   );
   const margin = r + 6;
-  const span = Math.max(1, state.viewW - margin * 2);
+  const span = Math.max(1, fieldW() - margin * 2);
   let x = margin + Math.random() * span;
   for (let attempt = 0; attempt < 6; attempt += 1) {
     const crowded = state.enemies.some(
@@ -365,7 +387,7 @@ function spawnEnemy() {
 function spawnSpark() {
   const r = clamp(state.viewH * 0.018, 8, state.viewW * 0.05);
   const margin = r + 10;
-  const span = Math.max(1, state.viewW - margin * 2);
+  const span = Math.max(1, fieldW() - margin * 2);
   state.orbs.push({
     x: margin + Math.random() * span,
     y: -r * 4,
@@ -382,6 +404,7 @@ function collectSpark(orb) {
   const gained = perk.sparkValue;
   state.sparks += gained;
   if (perk.sparkScore) state.score += perk.sparkScore;
+  maybeBloom();
   saveProgress();
   const player = state.player;
   player.targetLight = Math.min(player.initialLight, player.targetLight + player.initialLight * perks().heal);
@@ -437,6 +460,74 @@ function hurt(enemy) {
   else playHit(player.targetLight === 0);
 }
 
+function scaleWorld(k) {
+  if (!state.player || k === 1) return;
+  state.player.x *= k;
+  state.player.targetX *= k;
+  state.player.y *= k;
+  for (const enemy of state.enemies) {
+    enemy.x *= k;
+    enemy.y *= k;
+    if (enemy.homeX != null) enemy.homeX *= k;
+  }
+  for (const orb of state.orbs) {
+    orb.x *= k;
+    orb.y *= k;
+  }
+  for (const particle of state.particles) {
+    particle.x *= k;
+    particle.y *= k;
+    particle.vx *= k;
+    particle.vy *= k;
+  }
+  for (const floater of state.floaters) {
+    floater.x *= k;
+    floater.y *= k;
+  }
+}
+
+function bloomBurst() {
+  const player = state.player;
+  const reach = Math.max(fieldW(), fieldH());
+  const count = 56;
+  for (let i = 0; i < count; i += 1) {
+    const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.2;
+    const speed = reach * (0.28 + Math.random() * 0.42);
+    state.particles.push({
+      x: player.x,
+      y: player.y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      age: 0,
+      life: 0.85 + Math.random() * 0.55,
+      radius: unit() * (0.012 + Math.random() * 0.02),
+    });
+  }
+  state.shake = 1;
+}
+
+function maybeBloom() {
+  if (state.opened || state.dying || state.score < BLOOM_SCORE) return;
+  state.opened = true;
+  state.surgeLeft = BLOOM_SECONDS;
+  state.flash = 1;
+  bloomBurst();
+  playBloom();
+  announce("A luz abre.");
+}
+
+function tickBloom(dt) {
+  if (state.flash > 0) state.flash = Math.max(0, state.flash - dt * 1.35);
+  if (state.surgeLeft <= 0) return;
+  state.surgeLeft = Math.max(0, state.surgeLeft - dt);
+  const elapsed = BLOOM_SECONDS - state.surgeLeft;
+  const next = bloomSpan(elapsed);
+  const prev = state.span;
+  if (Math.abs(next - prev) < 1e-5) return;
+  state.span = next;
+  scaleWorld(next / prev);
+}
+
 function update(dt) {
   if (state.mode === "settings") {
     follow("menu", 0.85);
@@ -453,23 +544,27 @@ function update(dt) {
   state.time += dt;
   const player = state.player;
   const perk = perks();
-  player.y = state.viewH * perk.playerY;
+  player.y = fieldH() * perk.playerY;
   player.coreRadius = unit() * CORE_FRAC * perk.core;
 
   if (state.mode === "play") {
+    tickBloom(dt);
+    player.y = fieldH() * perk.playerY;
     player.x = lerp(player.x, player.targetX, perk.follow, dt);
-    player.x = clamp(player.x, player.coreRadius, state.viewW - player.coreRadius);
+    player.x = clamp(player.x, player.coreRadius, fieldW() - player.coreRadius);
 
     if (!state.dying) {
       state.elapsed += dt;
       state.calm += dt;
       const { speed, interval } = difficultyAt(state.elapsed, state.viewH);
-      state.spawnTimer -= dt;
-      let spawned = 0;
-      while (state.spawnTimer <= 0 && spawned < 3) {
-        spawnEnemy();
-        state.spawnTimer += interval * perk.interval;
-        spawned += 1;
+      if (state.surgeLeft <= 0) {
+        state.spawnTimer -= dt;
+        let spawned = 0;
+        while (state.spawnTimer <= 0 && spawned < 3) {
+          spawnEnemy();
+          state.spawnTimer += interval * perk.interval;
+          spawned += 1;
+        }
       }
       state.sparkTimer -= dt;
       if (state.sparkTimer <= 0) {
@@ -492,7 +587,7 @@ function update(dt) {
           enemy.x = clamp(
             enemy.homeX + Math.sin(state.time * freq + enemy.phase) * enemy.r * amp,
             enemy.r,
-            state.viewW - enemy.r,
+            fieldW() - enemy.r,
           );
         }
         enemy.y += speed * perk.speed * dt;
@@ -521,18 +616,19 @@ function update(dt) {
             playGraze();
           }
         }
-        if (enemy.y - enemy.r > state.viewH) {
+        if (enemy.y - enemy.r > fieldH()) {
           state.enemies.splice(i, 1);
           if (!state.dying) {
             const gained = enemy.points ?? 1;
             state.score += gained;
             announce(`Pontos ${state.score}`);
             if (gained === 1) playPass();
+            maybeBloom();
           }
         }
       }
 
-      const magnet = perk.magnet * state.viewH;
+      const magnet = perk.magnet * fieldH();
       for (let i = state.orbs.length - 1; i >= 0; i -= 1) {
         const orb = state.orbs[i];
         const previousY = orb.y;
@@ -542,7 +638,7 @@ function update(dt) {
           const dy = player.y - orb.y;
           const distance = Math.hypot(dx, dy);
           if (distance < magnet && distance > 1) {
-            const pull = state.viewH * 0.55 * dt;
+            const pull = fieldH() * 0.55 * dt;
             orb.x += (dx / distance) * pull;
             orb.y += (dy / distance) * pull * 0.35;
           }
@@ -557,7 +653,7 @@ function update(dt) {
           collectSpark(taken);
           continue;
         }
-        if (orb.y - orb.r > state.viewH) state.orbs.splice(i, 1);
+        if (orb.y - orb.r > fieldH()) state.orbs.splice(i, 1);
       }
     }
 
@@ -618,7 +714,7 @@ function insideRect(x, y, rect) {
 
 function aim(x) {
   const core = state.player.coreRadius;
-  state.player.targetX = clamp(x, core, state.viewW - core);
+  state.player.targetX = clamp(x * state.span, core, fieldW() - core);
 }
 
 function capturePointer(event) {
@@ -1726,6 +1822,21 @@ function drawPlayerGlow() {
   drawGlow(player.x, player.y, player.lightRadius, state.mode === "play" ? 1 : 0.35);
 }
 
+function drawBloom() {
+  if (!state.opened || state.surgeLeft <= 0 || !state.player) return;
+  const t = bloomEase(BLOOM_SECONDS - state.surgeLeft);
+  const player = state.player;
+  const reach = Math.hypot(fieldW(), fieldH()) * 0.62;
+  const radius = player.lightRadius + (reach - player.lightRadius) * t;
+  drawGlow(player.x, player.y, radius, 0.95 * (1 - t));
+}
+
+function drawFlash() {
+  if (state.flash <= 0) return;
+  ctx.fillStyle = `rgba(244, 254, 255, ${state.flash * 0.62})`;
+  ctx.fillRect(0, 0, state.viewW, state.viewH);
+}
+
 function draw() {
   ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
   drawBackground();
@@ -1748,6 +1859,9 @@ function draw() {
   } else if (state.mode === "tree") {
     drawTree();
   } else {
+    ctx.save();
+    ctx.scale(1 / state.span, 1 / state.span);
+    drawBloom();
     drawPlayerGlow();
     if (state.mode === "play" || state.mode === "paused") {
       for (const enemy of state.enemies) drawEnemy(enemy);
@@ -1766,6 +1880,8 @@ function draw() {
     if (state.player.lightRadius > 2) {
       drawCore(state.player.x, state.player.y, shownCoreRadius(state.player));
     }
+    ctx.restore();
+    drawFlash();
     if (state.mode === "play" || state.mode === "paused") {
       drawScore();
       drawSparkCount(18, Math.max(18, state.safeTop + 18));
@@ -1791,8 +1907,20 @@ function drawPaused() {
   ctx.fillText("Toque para continuar", x, state.viewH * 0.5);
 }
 
+function leaveScreen() {
+  setForeground(false);
+  pauseRun();
+}
+
+function returnScreen() {
+  setForeground(true);
+}
+
 function frame(now) {
-  if (document.hidden && state.mode === "play") pauseRun();
+  if (document.hidden) {
+    setForeground(false);
+    if (state.mode === "play") pauseRun();
+  }
   const dt = Math.min(MAX_DT, (now - state.last) / 1000);
   state.last = now;
   update(dt);
@@ -1807,9 +1935,28 @@ document.fonts?.load('700 64px "Lumina Sans"');
 announce(menuLine());
 initAds();
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden") pauseRun();
+  if (document.visibilityState === "hidden") leaveScreen();
+  else returnScreen();
 });
-window.addEventListener("pagehide", pauseRun);
-window.addEventListener("blur", pauseRun);
+window.addEventListener("pagehide", leaveScreen);
+window.addEventListener("pageshow", returnScreen);
+window.addEventListener("blur", leaveScreen);
+window.addEventListener("focus", returnScreen);
+
+function watchNativeApp() {
+  const cap = globalThis.Capacitor;
+  if (!cap?.isNativePlatform?.() || !cap.registerPlugin) return;
+  try {
+    const app = cap.registerPlugin("App");
+    app.addListener?.("appStateChange", ({ isActive }) => {
+      if (isActive) returnScreen();
+      else leaveScreen();
+    });
+  } catch {
+    /* The page events already cut the sound. */
+  }
+}
+
+watchNativeApp();
 state.last = performance.now();
 requestAnimationFrame(frame);

@@ -7,6 +7,11 @@ import {
   circlesOverlap,
   clamp,
   diamondPoints,
+  BLOOM_SCORE,
+  BLOOM_SECONDS,
+  BLOOM_SPAN,
+  bloomEase,
+  bloomSpan,
   difficultyAt,
   passScore,
   edgeFacing,
@@ -131,6 +136,16 @@ test("a close pass inside the light scores 2, and a far pass scores 1", () => {
   const dim = { ...player, lightRadius: 36 };
   assert.equal(passScore(dim, { x: 280, y: 700, r: 18 }), 1);
   assert.equal(passScore(player, { x: 280, y: 700, r: 18 }), 2);
+});
+
+test("the field opens over three seconds and then stays wider", () => {
+  assert.equal(BLOOM_SCORE, 400);
+  assert.equal(BLOOM_SECONDS, 3);
+  assert.equal(bloomSpan(0), 1);
+  assert.ok(bloomSpan(1.5) > 1 && bloomSpan(1.5) < BLOOM_SPAN);
+  assert.ok(bloomEase(1.5) > 1.5 / 3);
+  assert.equal(bloomSpan(3), BLOOM_SPAN);
+  assert.equal(bloomSpan(8), BLOOM_SPAN);
 });
 
 test("difficulty scales speed with the view height", () => {

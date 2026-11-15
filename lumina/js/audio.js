@@ -44,6 +44,7 @@ let nextBell = 0;
 let lastFollow = -1;
 let lastMode = "";
 let lastLight = -1;
+let foreground = true;
 
 function loadMuted() {
   try {
@@ -126,7 +127,7 @@ function ensure() {
   audio = new Context();
 
   master = audio.createGain();
-  master.gain.value = muted ? 0 : 1;
+  master.gain.value = foreground && !muted ? 1 : 0;
   master.connect(audio.destination);
 
   const filter = audio.createBiquadFilter();
@@ -175,11 +176,33 @@ function ensure() {
 
 function applyMute() {
   if (!master || !audio) return;
-  master.gain.setTargetAtTime(muted ? 0 : 1, audio.currentTime, 0.03);
+  const open = foreground && !muted;
+  master.gain.setTargetAtTime(open ? 1 : 0, audio.currentTime, 0.03);
+}
+
+export function isForeground() {
+  return foreground;
+}
+
+/** Cut every voice when the app leaves the screen, and bring it back on return. */
+export function setForeground(active) {
+  foreground = !!active;
+  lastMode = "";
+  if (!audio || !master) return;
+  const now = audio.currentTime;
+  if (!foreground) {
+    master.gain.setValueAtTime(0, now);
+    audio.suspend().catch(() => {});
+    return;
+  }
+  master.gain.setValueAtTime(muted ? 0 : 1, now);
+  if (sfx) sfx.gain.setValueAtTime(sfxVolume, now);
+  if (audio.state === "suspended") audio.resume();
 }
 
 export function unlock() {
   if (!ensure()) return;
+  if (!foreground) return;
   if (audio.state === "suspended") audio.resume();
 }
 
@@ -193,7 +216,7 @@ export function toggleMuted() {
 }
 
 function tone(freq, duration, peak, type = "sine", destination = sfx) {
-  if (!audio || !destination) return;
+  if (!foreground || !audio || !destination) return;
   const osc = audio.createOscillator();
   const gain = audio.createGain();
   const now = audio.currentTime;
@@ -209,7 +232,7 @@ function tone(freq, duration, peak, type = "sine", destination = sfx) {
 }
 
 function sweep(from, to, duration, peak) {
-  if (!audio || !sfx) return;
+  if (!foreground || !audio || !sfx) return;
   const osc = audio.createOscillator();
   const gain = audio.createGain();
   const now = audio.currentTime;
@@ -226,7 +249,7 @@ function sweep(from, to, duration, peak) {
 }
 
 function rustle(duration, frequency, peak) {
-  if (!audio || !noise || !sfx) return;
+  if (!foreground || !audio || !noise || !sfx) return;
   const source = audio.createBufferSource();
   const filter = audio.createBiquadFilter();
   const gain = audio.createGain();
@@ -246,6 +269,7 @@ function rustle(duration, frequency, peak) {
 }
 
 function stepChord(light) {
+  if (!foreground) return;
   const now = audio.currentTime;
   if (now < nextChord || layers.length < 2) return;
   const options = NEIGHBORS[chordIndex];
@@ -268,7 +292,7 @@ function stepChord(light) {
 }
 
 export function follow(mode, light) {
-  if (!audio || !music) return;
+  if (!foreground || !audio || !music) return;
   const now = audio.currentTime;
   const amount = Math.max(0, Math.min(1, light));
   if (mode !== "over" && mode !== "paused") stepChord(amount);
@@ -296,6 +320,13 @@ export function follow(mode, light) {
 export function playBegin() {
   unlock();
   sweep(220, 660, 0.34, 0.06);
+}
+
+export function playBloom() {
+  unlock();
+  sweep(140, 880, 0.85, 0.14);
+  tone(523.25, 0.45, 0.07);
+  tone(784, 0.7, 0.05);
 }
 
 export function playPass() {

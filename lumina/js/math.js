@@ -10,6 +10,9 @@ export const DIFFICULTY = {
   referenceHeight: 844,
 };
 
+export const BLOOM_SCORE = 400;
+export const BLOOM_SECONDS = 3;
+export const BLOOM_SPAN = 1.7;
 export const DAMAGE_FRACTION = 0.38;
 export const EXTINGUISH_FRACTION = 0.25;
 
@@ -184,6 +187,17 @@ export function passScore(player, enemy) {
   const inLight = distance <= player.lightRadius + enemy.r;
   const close = distance <= player.coreRadius + enemy.r + grazeMargin(player);
   return inLight && close ? 2 : 1;
+}
+
+/** 0 at the flash, 1 when the wider field has finished opening. */
+export function bloomEase(elapsed, seconds = BLOOM_SECONDS) {
+  const t = clamp(elapsed / Math.max(0.001, seconds), 0, 1);
+  return 1 - (1 - t) ** 3;
+}
+
+/** Camera span while the field opens. 1 is the starting view. */
+export function bloomSpan(elapsed, seconds = BLOOM_SECONDS, span = BLOOM_SPAN) {
+  return 1 + (span - 1) * bloomEase(elapsed, seconds);
 }
 
 export function difficultyAt(elapsedSeconds, viewHeight, config = DIFFICULTY) {

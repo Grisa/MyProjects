@@ -1,8 +1,8 @@
 # Lumina
 
-Endless runner vertical. Uma bolinha de luz fica na base da tela e só anda para os lados. A luz é o campo de visão: no escuro as sombras só mostram uma borda colorida, e o brilho acende a face virada para a bolinha. Cada uma que passa soma um ponto. Passar rente da bolinha, ainda dentro da luz, soma dois. Cada colisão apaga um pedaço da luz. Quando a luz acaba, a partida termina.
+Endless runner vertical. Uma bolinha de luz fica na base da tela e só anda para os lados. A luz é o campo de visão: no escuro as sombras só mostram uma borda colorida, e o brilho acende a face virada para a bolinha. Cada uma que passa soma um ponto. Passar rente da bolinha, ainda dentro da luz, soma dois. Cada colisão apaga um pedaço da luz. Quando a luz acaba, a partida termina. Aos 400 pontos a luz explode, os inimigos param de nascer por 3 segundos e a visão abre. A partida continua nesse campo maior.
 
-Na primeira vez, o menu diz que a luz também é a vida. Sair do app, ou chegar uma notificação por cima, pausa a partida até o próximo toque.
+Na primeira vez, o menu diz que a luz também é a vida. Sair do app, minimizar ou chegar uma notificação por cima pausa a partida até o próximo toque. O som para junto e só volta com o jogo na tela.
 
 Faíscas caem com menos frequência que os inimigos. Pegar uma devolve um pouco da luz e soma uma faísca. As faíscas ficam salvas neste aparelho e compram melhorias, em níveis: Passo 1, 2 e 3 deixam a bolinha seguir o dedo, Luz 1, 2 e 3 aumentam o brilho, Casco 1, 2 e 3 reduzem o dano, Ímã 1, 2 e 3 puxam faíscas. No começo a bolinha responde devagar. Na árvore, o que já foi comprado acende, o que dá para comprar agora tem uma luz fraca, e o resto fica apagado.
 
