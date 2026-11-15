@@ -19,7 +19,7 @@ import {
   difficultyAt,
   edgeFacing,
   enemyHitsPlayerSweep,
-  enemyOutline,
+  writeEnemyOutline,
   lerp,
   passScore,
 } from "./math.js";
@@ -92,8 +92,9 @@ const MAX_DT = 0.05;
 const canvas = document.querySelector("#game");
 const statusEl = document.querySelector("#status");
 const satProbe = document.querySelector("#sat");
-const ctx = canvas.getContext("2d");
+const ctx = canvas.getContext("2d", { alpha: false });
 const hitProbe = { x: 0, y: 0, coreRadius: 0, lightRadius: 0 };
+const drawPoints = [];
 
 const state = {
   mode: "menu",
@@ -252,8 +253,15 @@ function saveProgress() {
   }
 }
 
+let perkCache = null;
+
 function perks() {
-  return bonuses(state.owned);
+  if (!perkCache) perkCache = bonuses(state.owned);
+  return perkCache;
+}
+
+function invalidatePerks() {
+  perkCache = null;
 }
 
 function saveHighScore(score) {
@@ -1005,6 +1013,7 @@ function tryBuy(id) {
   if (!upgrade || !canBuy(upgrade, state.owned, state.sparks)) return;
   state.sparks -= upgrade.cost;
   state.owned.add(id);
+  invalidatePerks();
   saveProgress();
   playBuy();
   announce(`${upgrade.name} comprado. ${state.sparks} faíscas.`);
@@ -1094,10 +1103,9 @@ function glowSpriteCanvas() {
 function drawGlow(x, y, radius, alpha) {
   if (radius <= 0.5 || alpha <= 0) return;
   const sprite = glowSpriteCanvas();
-  ctx.save();
   ctx.globalAlpha = alpha;
   ctx.drawImage(sprite, x - radius, y - radius, radius * 2, radius * 2);
-  ctx.restore();
+  ctx.globalAlpha = 1;
 }
 
 function drawCore(x, y, radius) {
@@ -1119,7 +1127,7 @@ function traceOutline(points, x, y, r) {
 }
 
 function traceEnemy(enemy) {
-  traceOutline(enemyOutline(enemy), enemy.x, enemy.y, enemy.r);
+  traceOutline(writeEnemyOutline(enemy, drawPoints), enemy.x, enemy.y, enemy.r);
 }
 
 /** 0 outside the glow, 1 when the light reaches the body. */
@@ -1144,18 +1152,18 @@ function drawLitFaces(enemy, color, beam, points) {
     const facing = edgeFacing(a.x, a.y, b.x, b.y, enemy.x, enemy.y, player.x, player.y);
     if (facing <= 0.04) continue;
     const amount = Math.min(1, facing * (0.35 + beam * 0.9));
-    const midX = (a.x + b.x) / 2;
-    const midY = (a.y + b.y) / 2;
-    const face = ctx.createLinearGradient(midX, midY, enemy.x, enemy.y);
-    face.addColorStop(0, `rgba(244, 254, 255, ${0.95 * amount})`);
-    face.addColorStop(0.38, rgba(color, 0.72 * amount));
-    face.addColorStop(1, rgba(color, 0));
+    const pull = 0.42;
+    const ax = enemy.x + (a.x - enemy.x) * pull;
+    const ay = enemy.y + (a.y - enemy.y) * pull;
+    const bx = enemy.x + (b.x - enemy.x) * pull;
+    const by = enemy.y + (b.y - enemy.y) * pull;
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(b.x, b.y);
-    ctx.lineTo(enemy.x, enemy.y);
+    ctx.lineTo(bx, by);
+    ctx.lineTo(ax, ay);
     ctx.closePath();
-    ctx.fillStyle = face;
+    ctx.fillStyle = rgba(color, 0.72 * amount);
     ctx.fill();
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
@@ -1173,21 +1181,16 @@ function drawLitOrb(enemy, color, beam) {
   const distance = Math.hypot(dx, dy) || 1;
   const nx = dx / distance;
   const ny = dy / distance;
-  const highlight = ctx.createRadialGradient(
-    enemy.x + nx * enemy.r * 0.42,
-    enemy.y + ny * enemy.r * 0.42,
-    enemy.r * 0.04,
-    enemy.x,
-    enemy.y,
-    enemy.r,
+  ctx.fillStyle = rgba(color, 0.55 * beam);
+  ctx.beginPath();
+  ctx.arc(
+    enemy.x + nx * enemy.r * 0.34,
+    enemy.y + ny * enemy.r * 0.34,
+    enemy.r * 0.5,
+    0,
+    Math.PI * 2,
   );
-  highlight.addColorStop(0, `rgba(244, 254, 255, ${0.95 * beam})`);
-  highlight.addColorStop(0.34, rgba(color, 0.78 * beam));
-  highlight.addColorStop(1, rgba(color, 0));
-  ctx.fillStyle = highlight;
-  traceOutline(null, enemy.x, enemy.y, enemy.r);
   ctx.fill();
-
   const face = Math.atan2(ny, nx);
   ctx.beginPath();
   ctx.arc(enemy.x, enemy.y, enemy.r * 0.9, face - 1.05, face + 1.05);
@@ -1272,12 +1275,12 @@ let frameRim = 0.58;
 function drawEnemy(enemy) {
   if (enemy.y + enemy.r < 0 || enemy.y - enemy.r > fieldH()) return;
   const color = TINTS[enemy.tint] ?? TINTS.rose;
-  const beam = beamOn(enemy);
+  const points = writeEnemyOutline(enemy, drawPoints);
+  const dx = enemy.x - state.player.x;
+  const dy = enemy.y - state.player.y;
+  const reach = state.player.lightRadius + enemy.r;
+  const beam = dx * dx + dy * dy > reach * reach ? 0 : beamOn(enemy);
   const rim = frameRim + (enemy.kind === "lantern" ? 0.08 * Math.sin(state.time * 2.2 + (enemy.phase || 0)) : 0);
-  const points = enemyOutline(enemy);
-  ctx.save();
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
   traceOutline(points, enemy.x, enemy.y, enemy.r);
   ctx.fillStyle = "#05070f";
   ctx.fill();
@@ -1293,7 +1296,6 @@ function drawEnemy(enemy) {
     else drawLitOrb(enemy, color, beam);
   }
   drawPersona(enemy, color, beam, points);
-  ctx.restore();
 }
 
 function drawParticles() {
@@ -1307,15 +1309,16 @@ function drawParticles() {
 }
 
 function drawScore() {
-  ctx.save();
-  ctx.shadowColor = "rgba(5, 6, 15, 0.9)";
-  ctx.shadowBlur = 16;
-  ctx.fillStyle = "rgba(244, 252, 255, 0.92)";
+  const text = String(state.score);
+  const x = state.viewW / 2;
+  const y = Math.max(16, state.safeTop + 10);
   ctx.font = font(Math.max(22, unit() * 0.058), 600);
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
-  ctx.fillText(String(state.score), state.viewW / 2, Math.max(16, state.safeTop + 10));
-  ctx.restore();
+  ctx.fillStyle = "rgba(5, 6, 15, 0.85)";
+  ctx.fillText(text, x + 1, y + 1);
+  ctx.fillStyle = "rgba(244, 252, 255, 0.92)";
+  ctx.fillText(text, x, y);
 }
 
 function treeSpan() {
@@ -1398,12 +1401,14 @@ function onTreeTap(x, y) {
   }
 }
 
-function drawPill(rect, label, accent) {
+function drawPill(rect, label, accent, glow = true) {
   ctx.save();
   ctx.strokeStyle = accent;
   ctx.lineWidth = 1.5;
-  ctx.shadowColor = accent;
-  ctx.shadowBlur = 12;
+  if (glow) {
+    ctx.shadowColor = accent;
+    ctx.shadowBlur = 12;
+  }
   roundRect(rect.x, rect.y, rect.w, rect.h, rect.h / 2);
   ctx.stroke();
   ctx.restore();
@@ -1867,7 +1872,7 @@ function drawGameOver() {
 }
 
 function drawSettingsButton() {
-  drawPill(settingsRect(), "Ajustes", "rgba(190, 248, 255, 0.7)");
+  drawPill(settingsRect(), "Ajustes", "rgba(190, 248, 255, 0.7)", state.mode !== "play" && state.mode !== "paused");
 }
 
 function sliderTrack(which) {
@@ -1911,6 +1916,7 @@ function confirmButtons() {
 function eraseProgress() {
   state.sparks = 0;
   state.owned = new Set();
+  invalidatePerks();
   state.highScore = 0;
   state.hintSeen = false;
   state.tutorialSeen = false;
@@ -2305,6 +2311,8 @@ function draw() {
     drawBloom();
     drawPlayerGlow();
     if (state.mode === "play" || state.mode === "paused") {
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
       for (const enemy of state.enemies) drawEnemy(enemy);
       for (const orb of state.orbs) drawSparkGlyph(orb.x, orb.y, orb.r);
     }

@@ -73,49 +73,68 @@ export function circleHitsPolygon(cx, cy, radius, points) {
   return false;
 }
 
+/** Offsets from the center, in units of the radius. Built once. */
+const LOCAL_OUTLINE = {
+  diamond: [
+    [0, -1],
+    [0.72, 0],
+    [0, 1],
+    [-0.72, 0],
+  ],
+  shard: [
+    [0, -0.9],
+    [0.78, 0.68],
+    [-0.78, 0.68],
+  ],
+  lantern: Array.from({ length: 6 }, (_, i) => {
+    const angle = -Math.PI / 2 + (Math.PI * 2 * i) / 6;
+    return [Math.cos(angle) * 0.9, Math.sin(angle) * 0.9];
+  }),
+  grin: [
+    [-0.92 * 0.42, -0.52],
+    [0.92 * 0.42, -0.52],
+    [0.92, 0],
+    [0.92 * 0.42, 0.52],
+    [-0.92 * 0.42, 0.52],
+    [-0.92, 0],
+  ],
+};
+
+const outlineScratch = [];
+
 /** Diamond (rhombus) matching the shape drawn in the game. */
 export function diamondPoints(x, y, r) {
-  const halfW = r * 0.72;
-  return [
-    { x, y: y - r },
-    { x: x + halfW, y },
-    { x, y: y + r },
-    { x: x - halfW, y },
-  ];
+  return enemyOutline({ kind: "diamond", x, y, r });
+}
+
+/**
+ * Writes the world outline into `out`, reusing its point objects.
+ * A circle has no outline and returns null. The default buffer is shared,
+ * so callers that keep the points pass their own array.
+ */
+export function writeEnemyOutline(enemy, out = outlineScratch) {
+  const local = LOCAL_OUTLINE[enemy.kind];
+  if (!local) return null;
+  const { x, y, r } = enemy;
+  for (let i = 0; i < local.length; i += 1) {
+    const point = out[i] || (out[i] = { x: 0, y: 0 });
+    point.x = x + local[i][0] * r;
+    point.y = y + local[i][1] * r;
+  }
+  out.length = local.length;
+  return out;
 }
 
 /** Convex outline for every enemy that is not a circle. Null means a round body. */
 export function enemyOutline(enemy) {
-  const { x, y, r, kind } = enemy;
-  if (kind === "diamond") return diamondPoints(x, y, r);
-  if (kind === "shard") {
-    return [
-      { x, y: y - r * 0.9 },
-      { x: x + r * 0.78, y: y + r * 0.68 },
-      { x: x - r * 0.78, y: y + r * 0.68 },
-    ];
+  const local = LOCAL_OUTLINE[enemy.kind];
+  if (!local) return null;
+  const { x, y, r } = enemy;
+  const points = new Array(local.length);
+  for (let i = 0; i < local.length; i += 1) {
+    points[i] = { x: x + local[i][0] * r, y: y + local[i][1] * r };
   }
-  if (kind === "lantern") {
-    const points = [];
-    for (let i = 0; i < 6; i += 1) {
-      const angle = -Math.PI / 2 + (Math.PI * 2 * i) / 6;
-      points.push({ x: x + Math.cos(angle) * r * 0.9, y: y + Math.sin(angle) * r * 0.9 });
-    }
-    return points;
-  }
-  if (kind === "grin") {
-    const w = r * 0.92;
-    const h = r * 0.52;
-    return [
-      { x: x - w * 0.42, y: y - h },
-      { x: x + w * 0.42, y: y - h },
-      { x: x + w, y },
-      { x: x + w * 0.42, y: y + h },
-      { x: x - w * 0.42, y: y + h },
-      { x: x - w, y },
-    ];
-  }
-  return null;
+  return points;
 }
 
 /**
@@ -141,7 +160,7 @@ export function edgeFacing(ax, ay, bx, by, cx, cy, lightX, lightY) {
 }
 
 export function enemyHitsPlayer(player, enemy) {
-  const points = enemyOutline(enemy);
+  const points = writeEnemyOutline(enemy);
   if (points) return circleHitsPolygon(player.x, player.y, player.coreRadius, points);
   return circlesOverlap(player.x, player.y, player.coreRadius, enemy.x, enemy.y, enemy.r);
 }

@@ -28,6 +28,7 @@ import {
   enemyHitsPlayer,
   enemyHitsPlayerSweep,
   enemyOutline,
+  writeEnemyOutline,
   lerp,
   pointInConvexPolygon,
 } from "../js/math.js";
@@ -87,6 +88,24 @@ test("each silhouette contains its center and misses a clear miss", () => {
     assert.equal(enemyHitsPlayer(player, enemy), true);
     assert.equal(enemyHitsPlayer({ x: 80, y: 220, coreRadius: 6 }, enemy), false);
   }
+});
+
+test("the outline buffer is reused and matches a fresh outline", () => {
+  const enemy = { kind: "lantern", x: 12, y: 40, r: 25 };
+  const fresh = enemyOutline(enemy);
+  const reused = [];
+  const first = writeEnemyOutline(enemy, reused);
+  assert.equal(first, reused);
+  assert.equal(reused.length, fresh.length);
+  for (let i = 0; i < fresh.length; i += 1) {
+    assert.ok(Math.abs(reused[i].x - fresh[i].x) < 1e-9);
+    assert.ok(Math.abs(reused[i].y - fresh[i].y) < 1e-9);
+  }
+  const point = reused[0];
+  writeEnemyOutline({ kind: "shard", x: 3, y: 4, r: 10 }, reused);
+  assert.equal(reused[0], point);
+  assert.equal(reused.length, 3);
+  assert.equal(writeEnemyOutline({ kind: "orb", x: 0, y: 0, r: 8 }, reused), null);
 });
 
 test("enemy hit test uses the core, not the glow", () => {
