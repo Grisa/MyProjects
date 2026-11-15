@@ -2,7 +2,7 @@
 
 Endless runner vertical. Uma bolinha de luz fica na base da tela e só anda para os lados. A luz é o campo de visão: no escuro as sombras só mostram uma borda colorida, e o brilho acende a face virada para a bolinha. Cada uma que passa soma um ponto. Passar rente da bolinha, ainda dentro da luz, soma dois. Cada colisão apaga um pedaço da luz. Quando a luz acaba, a partida termina. Aos 400 pontos a luz explode, os inimigos param de nascer por 3 segundos e a visão abre. A partida continua nesse campo maior, e a partir daí os inimigos caem em dupla, com um vão entre os dois. Um pó fixo e bem fraco fica atrás da luz: quando a visão abre, esses pontos encolhem e entra mais campo no quadro. Ficar parado na borda não protege: o próximo inimigo nasce em cima de quem está no canto.
 
-Na primeira vez, o menu diz que a luz também é a vida. Sair do app, minimizar ou chegar uma notificação por cima pausa a partida até o próximo toque. O som para junto e só volta com o jogo na tela.
+Na primeira abertura, quatro cenas mostram o movimento, a luz, os pontos e o campo. Dá para pular. Em Ajustes, Como jogar abre as mesmas cenas. Apagar os dados traz esse tutorial na próxima abertura. O menu também diz que a luz é a vida até a primeira partida. Sair do app, minimizar ou chegar uma notificação por cima pausa a partida até o próximo toque. O som para junto e só volta com o jogo na tela.
 
 Faíscas caem com menos frequência que os inimigos. Pegar uma devolve um pouco da luz e soma uma faísca. As faíscas ficam salvas neste aparelho e compram melhorias, em níveis: Passo 1, 2 e 3 deixam a bolinha seguir o dedo, Luz 1, 2 e 3 aumentam o brilho, Casco 1, 2 e 3 reduzem o dano, Ímã 1, 2 e 3 puxam faíscas. No começo a bolinha responde devagar. Na árvore, o que já foi comprado acende, o que dá para comprar agora tem uma luz fraca, e o resto fica apagado.
 
@@ -10,7 +10,7 @@ No menu, o nome fica fino e quase apagado. A luz da bolinha é que acende as let
 
 O som também nasce no aparelho. O fundo troca de acorde a cada poucos segundos, as notas entram e somem, e o grave fica mais fino quando a luz baixa. Faísca, batida e fim de partida têm um efeito curto. Em Ajustes, a música e os efeitos têm um volume cada um. Apagar dados pede confirmação e zera recorde, faíscas e melhorias. Para ouvir cada som fora da partida, abra `samples.html`.
 
-O recorde fica em `lumina-high-score`. As faíscas e as melhorias compradas ficam em `lumina-sparks` e `lumina-upgrades`. A frase da primeira vez some depois da primeira partida (`lumina-hint`). O navegador guarda isso só no aparelho e não mostra anúncio. No app da Play Store, a cada duas mortes pode abrir um anúncio em tela cheia da Google.
+O recorde fica em `lumina-high-score`. As faíscas e as melhorias compradas ficam em `lumina-sparks` e `lumina-upgrades`. A frase da primeira vez some depois da primeira partida (`lumina-hint`). O tutorial visto fica em `lumina-tutorial`. O navegador guarda isso só no aparelho e não mostra anúncio. No app da Play Store, a cada duas mortes pode abrir um anúncio em tela cheia da Google.
 
 ## Jogar no computador
 

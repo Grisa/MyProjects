@@ -44,6 +44,25 @@ const HIGH_SCORE_KEY = "lumina-high-score";
 const SPARKS_KEY = "lumina-sparks";
 const UPGRADES_KEY = "lumina-upgrades";
 const HINT_KEY = "lumina-hint";
+const TUTORIAL_KEY = "lumina-tutorial";
+const TUTORIAL_PAGES = [
+  {
+    title: "Arraste",
+    lines: ["A bolinha fica embaixo.", "O dedo só a leva para os lados."],
+  },
+  {
+    title: "Desvie",
+    lines: ["As sombras caem no escuro.", "Um toque apaga um pedaço da luz."],
+  },
+  {
+    title: "Pontos",
+    lines: ["Passar soma 1. Rente soma 2.", "A faísca devolve luz."],
+  },
+  {
+    title: "O campo",
+    lines: ["Aos 400 a visão abre e caem dois.", "Ficar no canto não esconde."],
+  },
+];
 const PORTRAIT = 9 / 16;
 const CORE_FRAC = 0.028;
 const LIGHT_FRAC = 0.22;
@@ -89,6 +108,9 @@ const state = {
   dying: false,
   guardUsed: false,
   hintSeen: loadHintSeen(),
+  tutorialSeen: loadTutorialSeen(),
+  tutorialPage: 0,
+  tutorialReturn: "menu",
   settingsReturn: "menu",
   confirmErase: false,
   dragSlider: null,
@@ -119,6 +141,56 @@ function loadHintSeen() {
   } catch {
     return false;
   }
+}
+
+function loadTutorialSeen() {
+  try {
+    return localStorage.getItem(TUTORIAL_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markTutorialSeen() {
+  state.tutorialSeen = true;
+  try {
+    localStorage.setItem(TUTORIAL_KEY, "1");
+  } catch {
+    /* The same session still remembers that the pages were shown. */
+  }
+}
+
+function tutorialStatus() {
+  const page = TUTORIAL_PAGES[state.tutorialPage];
+  return `Como jogar. ${page.title}. ${page.lines.join(" ")}`;
+}
+
+function openTutorial(backTo) {
+  state.tutorialPage = 0;
+  state.tutorialReturn = backTo;
+  state.mode = "tutorial";
+  announce(tutorialStatus());
+}
+
+function closeTutorial() {
+  markTutorialSeen();
+  state.mode = state.tutorialReturn || "menu";
+  if (state.mode === "settings") announce("Ajustes.");
+  else if (state.mode === "paused") announce("Pausado. Toque para continuar.");
+  else if (state.mode === "over") announce(`Fim de jogo. Pontos ${state.score}. Recorde ${state.highScore}.`);
+  else announce(menuLine());
+}
+
+function stepTutorial(direction) {
+  const next = state.tutorialPage + direction;
+  if (next < 0 || next >= TUTORIAL_PAGES.length) {
+    playTap();
+    closeTutorial();
+    return;
+  }
+  state.tutorialPage = next;
+  playTap();
+  announce(tutorialStatus());
 }
 
 function rememberHint() {
@@ -580,7 +652,8 @@ function tickBloom(dt) {
 }
 
 function update(dt) {
-  if (state.mode === "settings") {
+  if (state.mode === "settings" || state.mode === "tutorial") {
+    if (state.mode === "tutorial") state.time += dt;
     follow("menu", 0.85);
     return;
   }
@@ -811,12 +884,21 @@ function onPointerDown(event) {
   if (event.button != null && event.button !== 0) return;
   event.preventDefault();
   const point = playfieldPoint(event.clientX, event.clientY);
-  if (state.mode !== "tree" && state.mode !== "settings" && insideRect(point.x, point.y, settingsRect())) {
+  if (
+    state.mode !== "tree"
+    && state.mode !== "settings"
+    && state.mode !== "tutorial"
+    && insideRect(point.x, point.y, settingsRect())
+  ) {
     unlock();
     openSettings();
     return;
   }
   unlock();
+  if (state.mode === "tutorial") {
+    onTutorialDown(point.x, point.y);
+    return;
+  }
   if (state.mode === "settings") {
     onSettingsDown(point.x, point.y);
     if (state.dragSlider) capturePointer(event);
@@ -1724,8 +1806,12 @@ function setSlider(which, x) {
   else setSfxVolume(value);
 }
 
+function tutorialButtonRect() {
+  return buttonRect(0.66);
+}
+
 function eraseRect() {
-  return buttonRect(0.74);
+  return buttonRect(0.8);
 }
 
 function confirmCard() {
@@ -1750,12 +1836,14 @@ function eraseProgress() {
   state.owned = new Set();
   state.highScore = 0;
   state.hintSeen = false;
+  state.tutorialSeen = false;
   state.selectedId = "centelha";
   try {
     localStorage.removeItem(SPARKS_KEY);
     localStorage.removeItem(UPGRADES_KEY);
     localStorage.removeItem(HIGH_SCORE_KEY);
     localStorage.removeItem(HINT_KEY);
+    localStorage.removeItem(TUTORIAL_KEY);
   } catch {
     /* The memory copy is already empty. */
   }
@@ -1777,6 +1865,11 @@ function onSettingsDown(x, y) {
   }
   if (insideRect(x, y, backRect())) {
     closeSettings();
+    return;
+  }
+  if (insideRect(x, y, tutorialButtonRect())) {
+    playTap();
+    openTutorial("settings");
     return;
   }
   if (insideRect(x, y, eraseRect())) {
@@ -1860,6 +1953,7 @@ function drawSettings() {
   drawPill(backRect(), "Voltar", "rgba(190, 248, 255, 0.7)");
   drawSlider("music", "Música");
   drawSlider("sfx", "Efeitos");
+  drawPill(tutorialButtonRect(), "Como jogar", "rgba(190, 248, 255, 0.85)");
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = "rgba(210, 226, 236, 0.55)";
@@ -1929,6 +2023,178 @@ function drawFlash() {
   ctx.fillRect(0, 0, state.viewW, state.viewH);
 }
 
+function tutorialPhotoRect() {
+  const nav = tutorialNav();
+  const top = Math.max(86, state.safeTop + 78);
+  const w = Math.min(state.viewW - 48, 360);
+  const room = nav.back.y - 112 - top;
+  const h = Math.max(120, Math.min(room, w * 1.08, state.viewH * 0.42));
+  return { x: (state.viewW - w) / 2, y: top, w, h };
+}
+
+function tutorialNav() {
+  const gap = 12;
+  const w = Math.min(156, (state.viewW - 48 - gap) / 2);
+  const h = Math.max(48, unit() * 0.08);
+  const y = state.viewH - h - Math.max(24, state.viewH * 0.05);
+  const x = (state.viewW - (w * 2 + gap)) / 2;
+  return {
+    back: { x, y, w, h },
+    next: { x: x + w + gap, y, w, h },
+  };
+}
+
+function tutorialStandIn(x, y, light, core) {
+  return {
+    x,
+    y,
+    targetX: x,
+    coreRadius: core,
+    lightRadius: light,
+    targetLight: light,
+    initialLight: light,
+  };
+}
+
+function tutorialEnemy(kind, tint, x, y, r) {
+  return { kind, tint, x, y, r, homeX: x, phase: 0.6 };
+}
+
+function withPlayer(player, drawScene) {
+  const previous = state.player;
+  state.player = player;
+  drawScene();
+  state.player = previous;
+}
+
+function drawTutorialScene(page, photo) {
+  const ballY = photo.y + photo.h * 0.78;
+  const core = Math.min(photo.w, photo.h) * 0.05;
+  const light = Math.min(photo.w, photo.h) * 0.3;
+  const mid = photo.x + photo.w / 2;
+
+  ctx.save();
+  roundRect(photo.x, photo.y, photo.w, photo.h, 22);
+  ctx.clip();
+  ctx.fillStyle = "#04060c";
+  ctx.fillRect(photo.x, photo.y, photo.w, photo.h);
+  const wash = ctx.createRadialGradient(mid, photo.y + photo.h * 0.7, 8, mid, photo.y + photo.h * 0.55, photo.h * 0.7);
+  wash.addColorStop(0, "#10182a");
+  wash.addColorStop(1, "#04060c");
+  ctx.fillStyle = wash;
+  ctx.fillRect(photo.x, photo.y, photo.w, photo.h);
+  ctx.fillStyle = "rgba(198, 220, 236, 0.16)";
+  for (const [px, py] of [[0.18, 0.16], [0.74, 0.22], [0.42, 0.36], [0.86, 0.58], [0.22, 0.64], [0.6, 0.48]]) {
+    ctx.beginPath();
+    ctx.arc(photo.x + photo.w * px, photo.y + photo.h * py, 2.1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  if (page === 0) {
+    const sway = Math.sin(state.time * 1.5);
+    const ballX = mid + sway * photo.w * 0.2;
+    const fingerY = photo.y + photo.h * 0.4;
+    ctx.save();
+    ctx.setLineDash([6, 8]);
+    ctx.strokeStyle = "rgba(190, 248, 255, 0.4)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(photo.x + photo.w * 0.16, fingerY);
+    ctx.lineTo(photo.x + photo.w * 0.84, fingerY);
+    ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = "rgba(244, 254, 255, 0.9)";
+    ctx.beginPath();
+    ctx.arc(mid + sway * photo.w * 0.26, fingerY, 11, 0, Math.PI * 2);
+    ctx.fill();
+    withPlayer(tutorialStandIn(ballX, ballY, light, core), () => {
+      drawGlow(ballX, ballY, light, 1);
+      drawCore(ballX, ballY, core);
+    });
+  } else if (page === 1) {
+    const ballX = mid;
+    const near = tutorialEnemy("diamond", "violet", mid, photo.y + photo.h * 0.52, photo.h * 0.1);
+    const far = tutorialEnemy("shard", "teal", photo.x + photo.w * 0.78, photo.y + photo.h * 0.16, photo.h * 0.07);
+    withPlayer(tutorialStandIn(ballX, ballY, light * 0.85, core), () => {
+      drawGlow(ballX, ballY, light * 0.85, 1);
+      drawEnemy(far);
+      drawEnemy(near);
+      drawCore(ballX, ballY, core);
+    });
+  } else if (page === 2) {
+    const ballX = mid - photo.w * 0.08;
+    const passer = tutorialEnemy("orb", "rose", mid + photo.w * 0.16, ballY - light * 0.35, photo.h * 0.09);
+    withPlayer(tutorialStandIn(ballX, ballY, light, core), () => {
+      drawGlow(ballX, ballY, light, 1);
+      drawEnemy(passer);
+      drawSparkGlyph(photo.x + photo.w * 0.22, photo.y + photo.h * 0.34, photo.h * 0.028);
+      drawCore(ballX, ballY, core);
+    });
+    ctx.fillStyle = "#ffe2a4";
+    ctx.font = font(Math.max(18, photo.h * 0.07), 700);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("+2", passer.x, passer.y - passer.r - 16);
+  } else {
+    const ballX = mid + photo.w * 0.06;
+    const left = tutorialEnemy("lantern", "copper", photo.x + photo.w * 0.2, photo.y + photo.h * 0.28, photo.h * 0.09);
+    const right = tutorialEnemy("grin", "blue", photo.x + photo.w * 0.74, photo.y + photo.h * 0.28, photo.h * 0.09);
+    withPlayer(tutorialStandIn(ballX, ballY, light * 0.72, core), () => {
+      drawGlow(ballX, ballY, light * 0.72, 1);
+      drawEnemy(left);
+      drawEnemy(right);
+      drawCore(ballX, ballY, core);
+    });
+  }
+
+  ctx.restore();
+  ctx.save();
+  ctx.strokeStyle = "rgba(186, 214, 228, 0.35)";
+  ctx.lineWidth = 1.5;
+  roundRect(photo.x, photo.y, photo.w, photo.h, 22);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function onTutorialDown(x, y) {
+  const buttons = tutorialNav();
+  if (insideRect(x, y, buttons.back)) stepTutorial(-1);
+  else if (insideRect(x, y, buttons.next)) stepTutorial(1);
+}
+
+function drawTutorial() {
+  const page = TUTORIAL_PAGES[state.tutorialPage];
+  const photo = tutorialPhotoRect();
+  const x = state.viewW / 2;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "rgba(190, 248, 255, 0.62)";
+  ctx.font = font(Math.max(13, unit() * 0.032), 500);
+  ctx.fillText("Como jogar", x, Math.max(22, state.safeTop + 16));
+  ctx.fillStyle = "#f4feff";
+  ctx.font = font(Math.max(26, unit() * 0.064), 500);
+  ctx.fillText(page.title, x, photo.y - 30);
+  drawTutorialScene(state.tutorialPage, photo);
+  ctx.fillStyle = "rgba(214, 232, 240, 0.88)";
+  ctx.font = font(Math.max(16, unit() * 0.04), 500);
+  page.lines.forEach((line, index) => {
+    ctx.fillText(line, x, photo.y + photo.h + 32 + index * 26);
+  });
+  const dotsY = photo.y + photo.h + 96;
+  for (let i = 0; i < TUTORIAL_PAGES.length; i += 1) {
+    const dx = x + (i - (TUTORIAL_PAGES.length - 1) / 2) * 16;
+    ctx.beginPath();
+    ctx.arc(dx, dotsY, i === state.tutorialPage ? 4.5 : 3, 0, Math.PI * 2);
+    ctx.fillStyle = i === state.tutorialPage ? "#f4feff" : "rgba(186, 214, 228, 0.35)";
+    ctx.fill();
+  }
+  const buttons = tutorialNav();
+  const leaving = state.tutorialReturn === "settings" ? "Fechar" : "Pular";
+  drawPill(buttons.back, state.tutorialPage === 0 ? leaving : "Anterior", "rgba(190, 248, 255, 0.55)");
+  const last = state.tutorialPage === TUTORIAL_PAGES.length - 1;
+  drawPill(buttons.next, last ? "Entendi" : "Próximo", "rgba(126, 249, 255, 0.95)");
+}
+
 function draw() {
   ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
   drawBackground();
@@ -1946,6 +2212,8 @@ function draw() {
 
   if (state.mode === "menu") {
     drawMenu();
+  } else if (state.mode === "tutorial") {
+    drawTutorial();
   } else if (state.mode === "settings") {
     drawSettings();
   } else if (state.mode === "tree") {
@@ -2025,7 +2293,8 @@ layout();
 document.fonts?.load('100 64px "Lumina Sans"');
 document.fonts?.load('500 28px "Lumina Sans"');
 document.fonts?.load('700 64px "Lumina Sans"');
-announce(menuLine());
+if (!state.tutorialSeen) openTutorial("menu");
+else announce(menuLine());
 initAds();
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") leaveScreen();
