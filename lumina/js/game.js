@@ -7,6 +7,7 @@ import {
   enemyHitsPlayerSweep,
   enemyOutline,
   lerp,
+  passScore,
 } from "./math.js";
 import { UPGRADES, bonuses, canBuy, nodeState, upgradeById } from "./upgrades.js";
 import { initAds, noteDeath } from "./ads.js";
@@ -16,6 +17,7 @@ import {
   playBegin,
   playBuy,
   playDeath,
+  playGraze,
   playGuard,
   playHit,
   playPass,
@@ -28,6 +30,7 @@ import {
 const HIGH_SCORE_KEY = "lumina-high-score";
 const SPARKS_KEY = "lumina-sparks";
 const UPGRADES_KEY = "lumina-upgrades";
+const HINT_KEY = "lumina-hint";
 const PORTRAIT = 9 / 16;
 const CORE_FRAC = 0.028;
 const LIGHT_FRAC = 0.22;
@@ -73,6 +76,7 @@ const state = {
   shake: 0,
   dying: false,
   guardUsed: false,
+  hintSeen: loadHintSeen(),
   width: 0,
   height: 0,
   viewW: 0,
@@ -89,6 +93,30 @@ const state = {
   pointerId: null,
   announced: "",
 };
+
+function loadHintSeen() {
+  try {
+    return localStorage.getItem(HINT_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function rememberHint() {
+  if (state.hintSeen) return;
+  state.hintSeen = true;
+  try {
+    localStorage.setItem(HINT_KEY, "1");
+  } catch {
+    /* The sentence can return next time if storage is blocked. */
+  }
+}
+
+function menuLine() {
+  const record = state.highScore > 0 ? ` Recorde ${state.highScore}.` : "";
+  const hint = state.hintSeen ? "" : " A luz também é a vida.";
+  return `Toque para jogar.${record}${hint}`;
+}
 
 function loadHighScore() {
   try {
@@ -264,7 +292,23 @@ function resetRun(pointerX) {
   state.dying = false;
   state.guardUsed = false;
   state.mode = "play";
+  rememberHint();
   announce("Pontos 0");
+}
+
+function pauseRun() {
+  if (state.mode !== "play") return;
+  state.mode = "paused";
+  state.pointerId = null;
+  announce("Pausado. Toque para continuar.");
+}
+
+function resumeRun(pointerX) {
+  if (state.mode !== "paused") return;
+  state.mode = "play";
+  state.last = performance.now();
+  if (Number.isFinite(pointerX)) aim(pointerX);
+  announce(`Pontos ${state.score}`);
 }
 
 function endRun() {
@@ -390,6 +434,14 @@ function hurt(enemy) {
 }
 
 function update(dt) {
+  if (state.mode === "paused") {
+    const pausedLight = state.player?.initialLight
+      ? state.player.lightRadius / state.player.initialLight
+      : 0.4;
+    follow("paused", pausedLight);
+    return;
+  }
+
   state.time += dt;
   const player = state.player;
   const perk = perks();
@@ -442,12 +494,32 @@ function update(dt) {
           hurt(struck);
           continue;
         }
+        if (
+          enemy.points == null
+          && previousY < player.y
+          && enemy.y >= player.y
+        ) {
+          enemy.points = passScore(
+            {
+              x: player.x,
+              y: player.y,
+              coreRadius: shownCoreRadius(player),
+              lightRadius: player.lightRadius,
+            },
+            enemy,
+          );
+          if (enemy.points > 1) {
+            popup(enemy.x, player.y - unit() * 0.05, "+2");
+            playGraze();
+          }
+        }
         if (enemy.y - enemy.r > state.viewH) {
           state.enemies.splice(i, 1);
           if (!state.dying) {
-            state.score += 1;
+            const gained = enemy.points ?? 1;
+            state.score += gained;
             announce(`Pontos ${state.score}`);
-            playPass();
+            if (gained === 1) playPass();
           }
         }
       }
@@ -574,6 +646,11 @@ function onPointerDown(event) {
     return;
   }
   unlock();
+  if (state.mode === "paused") {
+    resumeRun(point.x);
+    capturePointer(event);
+    return;
+  }
   if (state.mode === "menu") {
     if (insideRect(point.x, point.y, buttonRect(0.8))) {
       playTap();
@@ -965,7 +1042,7 @@ function backRect() {
 function onTreeTap(x, y) {
   if (insideRect(x, y, backRect())) {
     state.mode = "menu";
-    announce(state.highScore > 0 ? `Toque para jogar. Recorde ${state.highScore}.` : "Toque para jogar.");
+    announce(menuLine());
     return;
   }
   const selected = upgradeById(state.selectedId);
@@ -1351,6 +1428,15 @@ function drawMenu() {
   const button = buttonRect(0.8);
   const sparkY = button.y - Math.max(36, unit() * 0.09);
   const recordY = sparkY - Math.max(28, unit() * 0.07);
+  if (!state.hintSeen && recordY - hintY > 64) {
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "rgba(214, 232, 240, 0.82)";
+    ctx.font = font(Math.max(15, unit() * 0.038), 500);
+    ctx.fillText("A luz também é a vida", x, hintY + (recordY - hintY) * 0.42);
+    ctx.restore();
+  }
   ctx.save();
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -1475,7 +1561,7 @@ function draw() {
     drawTree();
   } else {
     drawPlayerGlow();
-    if (state.mode === "play") {
+    if (state.mode === "play" || state.mode === "paused") {
       for (const enemy of state.enemies) drawEnemy(enemy);
       for (const orb of state.orbs) drawSparkGlyph(orb.x, orb.y, orb.r);
     }
@@ -1492,9 +1578,10 @@ function draw() {
     if (state.player.lightRadius > 2) {
       drawCore(state.player.x, state.player.y, shownCoreRadius(state.player));
     }
-    if (state.mode === "play") {
+    if (state.mode === "play" || state.mode === "paused") {
       drawScore();
       drawSparkCount(18, Math.max(18, state.safeTop + 18));
+      if (state.mode === "paused") drawPaused();
       drawMute();
     } else drawGameOver();
   }
@@ -1502,7 +1589,22 @@ function draw() {
   ctx.restore();
 }
 
+function drawPaused() {
+  ctx.fillStyle = "rgba(4, 6, 12, 0.5)";
+  ctx.fillRect(0, 0, state.viewW, state.viewH);
+  const x = state.viewW / 2;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#f4feff";
+  ctx.font = font(Math.max(28, unit() * 0.07), 500);
+  ctx.fillText("Pausado", x, state.viewH * 0.42);
+  ctx.fillStyle = "rgba(210, 226, 236, 0.82)";
+  ctx.font = font(Math.max(16, unit() * 0.04), 500);
+  ctx.fillText("Toque para continuar", x, state.viewH * 0.5);
+}
+
 function frame(now) {
+  if (document.hidden && state.mode === "play") pauseRun();
   const dt = Math.min(MAX_DT, (now - state.last) / 1000);
   state.last = now;
   update(dt);
@@ -1514,7 +1616,12 @@ layout();
 document.fonts?.load('100 64px "Lumina Sans"');
 document.fonts?.load('500 28px "Lumina Sans"');
 document.fonts?.load('700 64px "Lumina Sans"');
-announce(state.highScore > 0 ? `Toque para jogar. Recorde ${state.highScore}.` : "Toque para jogar.");
+announce(menuLine());
 initAds();
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") pauseRun();
+});
+window.addEventListener("pagehide", pauseRun);
+window.addEventListener("blur", pauseRun);
 state.last = performance.now();
 requestAnimationFrame(frame);

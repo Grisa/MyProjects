@@ -1,6 +1,8 @@
 # Lumina
 
-Endless runner vertical. Uma bolinha de luz fica na base da tela e só anda para os lados. A luz é o campo de visão: no escuro as sombras só mostram uma borda colorida, e o brilho acende a face virada para a bolinha. Cada uma que passa soma um ponto. Cada colisão apaga um pedaço da luz. Quando a luz acaba, a partida termina.
+Endless runner vertical. Uma bolinha de luz fica na base da tela e só anda para os lados. A luz é o campo de visão: no escuro as sombras só mostram uma borda colorida, e o brilho acende a face virada para a bolinha. Cada uma que passa soma um ponto. Passar rente da bolinha, ainda dentro da luz, soma dois. Cada colisão apaga um pedaço da luz. Quando a luz acaba, a partida termina.
+
+Na primeira vez, o menu diz que a luz também é a vida. Sair do app, ou chegar uma notificação por cima, pausa a partida até o próximo toque.
 
 Faíscas caem com menos frequência que os inimigos. Pegar uma devolve um pouco da luz e soma uma faísca. As faíscas ficam salvas neste aparelho e compram melhorias: cada compra libera os próximos nós da árvore. Dá para encolher o núcleo, estender a luz, ver a borda das sombras antes, sobreviver a um golpe fatal, frear a queda, espaçar os inimigos e transformar faísca em ponto.
 
@@ -8,7 +10,7 @@ No menu, o nome fica fino e quase apagado. A luz da bolinha é que acende as let
 
 O som também nasce no aparelho. Um fundo grave fica mais fino quando a luz baixa, e cada faísca, batida e fim de partida tem um efeito curto. O alto-falante no canto desliga o som. A escolha fica em `lumina-muted`.
 
-O recorde fica em `lumina-high-score`. As faíscas e as melhorias compradas ficam em `lumina-sparks` e `lumina-upgrades`. O navegador guarda isso só no aparelho e não mostra anúncio. No app da Play Store, a cada duas mortes pode abrir um anúncio em tela cheia da Google.
+O recorde fica em `lumina-high-score`. As faíscas e as melhorias compradas ficam em `lumina-sparks` e `lumina-upgrades`. A frase da primeira vez some depois da primeira partida (`lumina-hint`). O navegador guarda isso só no aparelho e não mostra anúncio. No app da Play Store, a cada duas mortes pode abrir um anúncio em tela cheia da Google.
 
 ## Jogar no computador
 
@@ -60,4 +62,4 @@ O jogo está pronto para virar o app. Ainda não dá para enviar a ficha: isso u
 
 O anúncio abre em tela cheia a cada duas mortes, depois que a luz apaga. No navegador ele não aparece. Texto que pode ir na política: o Lumina não tem conta. Recorde, faíscas e melhorias ficam no aparelho. No app Android, o AdMob pode receber identificadores do aparelho para mostrar o anúncio.
 
-`npm test` cobre colisão, a curva de dificuldade, a árvore de melhorias e o ritmo do anúncio. A cada 7 segundos a queda fica 8% mais rápida e o intervalo entre inimigos cai 8%, sem ficar menor que 0,28 s.
+`npm test` cobre colisão, a curva de dificuldade, o ponto do desvio rente, a árvore de melhorias e o ritmo do anúncio. A cada 7 segundos a queda fica 8% mais rápida e o intervalo entre inimigos cai 8%, sem ficar menor que 0,28 s.

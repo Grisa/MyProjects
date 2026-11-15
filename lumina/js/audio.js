@@ -184,12 +184,12 @@ export function follow(mode, light) {
     lastFollow = now;
     lastMode = mode;
     const amount = Math.max(0, Math.min(1, light));
-    const level = mode === "play" ? 0.26 : mode === "over" ? 0.07 : 0.16;
+    const level = mode === "play" ? 0.26 : mode === "over" ? 0.07 : mode === "paused" ? 0.1 : 0.16;
     music.gain.setTargetAtTime(level, now, 0.4);
     color?.setTargetAtTime(380 + amount * 1500, now, 0.5);
     shimmer?.gain.setTargetAtTime(0.012 + amount * 0.05, now, 0.5);
   }
-  if (muted || mode === "over" || now < nextBell) return;
+  if (muted || mode === "over" || mode === "paused" || now < nextBell) return;
   const amount = Math.max(0, Math.min(1, light));
   const scale = amount < 0.45 ? LOW : HIGH;
   const note = scale[Math.floor(Math.random() * scale.length)];
@@ -205,6 +205,11 @@ export function playBegin() {
 
 export function playPass() {
   tone(920 + Math.random() * 180, 0.07, 0.025);
+}
+
+export function playGraze() {
+  tone(1180, 0.09, 0.045);
+  tone(1560, 0.14, 0.03);
 }
 
 export function playSpark() {

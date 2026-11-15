@@ -8,6 +8,7 @@ import {
   clamp,
   diamondPoints,
   difficultyAt,
+  passScore,
   edgeFacing,
   distPointToSegmentSq,
   enemyHitsPlayer,
@@ -120,6 +121,16 @@ test("difficulty rises every 7 seconds and the spawn interval has a floor", () =
   const late = difficultyAt(7 * 40, DIFFICULTY.referenceHeight);
   assert.equal(late.interval, DIFFICULTY.minInterval);
   assert.ok(late.speed > step.speed);
+});
+
+test("a close pass inside the light scores 2, and a far pass scores 1", () => {
+  const player = { x: 200, y: 700, coreRadius: 12, lightRadius: 180 };
+  assert.equal(passScore(player, { x: 20, y: 700, r: 18 }), 1);
+  assert.equal(passScore(player, { x: 240, y: 700, r: 18 }), 2);
+
+  const dim = { ...player, lightRadius: 36 };
+  assert.equal(passScore(dim, { x: 280, y: 700, r: 18 }), 1);
+  assert.equal(passScore(player, { x: 280, y: 700, r: 18 }), 2);
 });
 
 test("difficulty scales speed with the view height", () => {

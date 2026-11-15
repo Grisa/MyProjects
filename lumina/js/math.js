@@ -167,6 +167,25 @@ export function applyDamage(targetRadius, initialRadius, fraction = DAMAGE_FRACT
   return next;
 }
 
+/** Share of the light radius that still counts as skimming the core. */
+export const GRAZE_LIGHT_FRACTION = 0.28;
+
+export function grazeMargin(player) {
+  return Math.max(player.coreRadius * 1.6, player.lightRadius * GRAZE_LIGHT_FRACTION);
+}
+
+/**
+ * Points for an enemy that passed without hitting.
+ * A far pass is 1. Skimming the core, inside the light, is 2.
+ * A smaller light makes that skim harder.
+ */
+export function passScore(player, enemy) {
+  const distance = Math.hypot(player.x - enemy.x, player.y - enemy.y);
+  const inLight = distance <= player.lightRadius + enemy.r;
+  const close = distance <= player.coreRadius + enemy.r + grazeMargin(player);
+  return inLight && close ? 2 : 1;
+}
+
 export function difficultyAt(elapsedSeconds, viewHeight, config = DIFFICULTY) {
   const elapsed = Math.max(0, elapsedSeconds);
   const height = Math.max(1, viewHeight);
