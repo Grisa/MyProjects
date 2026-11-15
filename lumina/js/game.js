@@ -966,7 +966,15 @@ function drawSparkCount(x, y, align = "left") {
   ctx.font = font(Math.max(15, unit() * 0.038), 600);
   ctx.fillStyle = "rgba(255, 228, 170, 0.92)";
   const text = String(state.sparks);
-  if (align === "left") {
+  if (align === "center") {
+    const width = ctx.measureText(text).width;
+    const glyph = 5;
+    const gap = 8;
+    const left = x - (width + gap + glyph * 2) / 2;
+    ctx.textAlign = "left";
+    ctx.fillText(text, left, y);
+    drawSparkGlyph(left + width + gap + glyph, y, glyph);
+  } else if (align === "left") {
     drawSparkGlyph(x + 7, y, 5);
     ctx.fillText(text, x + 20, y);
   } else {
@@ -1214,19 +1222,19 @@ function lightLayerContext() {
 }
 
 /** A faint letter in the dark, and the same letter caught by the ball's light. */
-function drawTextInLight(text, x, y, size, weight, tracking, lightX, lightY, radius, ghost, litWeight = 700) {
+function drawTextInLight(text, x, y, size, weight, tracking, lightX, lightY, radius, ghost) {
+  const face = font(size, weight);
   ctx.save();
-  ctx.font = font(size, weight);
+  ctx.font = face;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   setLetterSpacing(tracking);
-  ctx.lineWidth = Math.max(1, size * 0.035);
-  ctx.strokeStyle = `rgba(186, 214, 228, ${ghost})`;
-  ctx.strokeText(text, x, y);
+  ctx.fillStyle = `rgba(186, 214, 228, ${ghost})`;
+  ctx.fillText(text, x, y);
   ctx.restore();
 
   const layer = lightLayerContext();
-  layer.font = font(size, litWeight);
+  layer.font = face;
   layer.textAlign = "center";
   layer.textBaseline = "middle";
   if ("letterSpacing" in layer) layer.letterSpacing = `${tracking}px`;
@@ -1250,46 +1258,53 @@ function drawTextInLight(text, x, y, size, weight, tracking, lightX, lightY, rad
 function drawMenu() {
   const pulse = 1 + Math.sin(state.time * 2.2) * 0.1;
   const x = state.viewW / 2;
-  const y = state.viewH * 0.4 + Math.sin(state.time * 0.7) * unit() * 0.012;
   const radius = unit() * LIGHT_FRAC * pulse;
-  drawGlow(x, y, radius, 1);
+  const titleSize = Math.max(42, unit() * 0.12);
+  const hintSize = Math.max(16, unit() * 0.04);
+  const core = unit() * CORE_FRAC;
+  const titleY = state.viewH * 0.28;
+  const y = titleY + titleSize * 0.62 + core + 18;
+  const hintY = y + radius * 0.72;
 
-  const titleSize = Math.max(46, unit() * 0.145);
+  drawGlow(x, y, radius, 1);
   drawTextInLight(
     "LUMINA",
     x,
-    y - titleSize * 0.08,
+    titleY,
     titleSize,
-    100,
-    Math.round(titleSize * 0.08),
+    500,
+    Math.round(titleSize * 0.14),
     x,
     y,
-    radius * 1.25,
-    0.55,
+    radius * 1.35,
+    0.34,
   );
-  drawCore(x, y, unit() * CORE_FRAC);
-
-  const hintSize = Math.max(17, unit() * 0.044);
+  drawCore(x, y, core);
   drawTextInLight(
     "Toque para jogar",
     x,
-    y + radius * 0.5,
+    hintY,
     hintSize,
-    400,
-    Math.round(hintSize * 0.04),
+    500,
+    0,
     x,
     y,
-    radius * 1.05,
-    0.28,
+    radius * 1.15,
+    0.45,
   );
 
-  if (state.highScore > 0) {
-    ctx.fillStyle = "rgba(255, 255, 255, 0.55)";
-    ctx.font = font(Math.max(14, unit() * 0.036), 500);
-    ctx.fillText(`Recorde ${state.highScore}`, x, state.viewH * 0.7);
-  }
-  drawSparkCount(x - 8, state.viewH * 0.755, "right");
-  drawPill(buttonRect(0.8), "Melhorias", "rgba(255, 214, 120, 0.9)");
+  const button = buttonRect(0.8);
+  const sparkY = button.y - Math.max(36, unit() * 0.09);
+  const recordY = sparkY - Math.max(28, unit() * 0.07);
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "rgba(210, 226, 236, 0.62)";
+  ctx.font = font(Math.max(14, unit() * 0.036), 500);
+  ctx.fillText(state.highScore > 0 ? `Recorde ${state.highScore}` : "Recorde 0", x, recordY);
+  ctx.restore();
+  drawSparkCount(x, sparkY, "center");
+  drawPill(button, "Melhorias", "rgba(255, 214, 120, 0.9)");
 }
 
 function roundRect(x, y, w, h, radius) {
