@@ -1,6 +1,6 @@
 :root {
   color-scheme: dark;
-  --bg: #05060f;
+  --bg: #04060c;
   --sat: env(safe-area-inset-top, 0px);
 }
 

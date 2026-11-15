@@ -202,7 +202,6 @@ function spawnEnemy() {
   }
   state.enemies.push({
     kind: diamond ? "diamond" : "orb",
-    hue: diamond ? "violet" : "rose",
     x,
     y: -r - 6,
     r,
@@ -391,29 +390,30 @@ function setLetterSpacing(px) {
 }
 
 function drawBackground() {
-  ctx.fillStyle = "#05060f";
+  ctx.fillStyle = "#04060c";
   ctx.fillRect(0, 0, state.width, state.height);
   const gradient = ctx.createRadialGradient(
     state.offsetX + state.viewW / 2,
-    state.offsetY + state.viewH * 0.22,
-    state.viewH * 0.04,
+    state.offsetY + state.viewH * 0.35,
+    state.viewH * 0.02,
     state.offsetX + state.viewW / 2,
     state.offsetY + state.viewH * 0.55,
-    state.viewH * 0.78,
+    state.viewH * 0.8,
   );
-  gradient.addColorStop(0, "#12183a");
-  gradient.addColorStop(1, "#05060f");
+  gradient.addColorStop(0, "#0c1222");
+  gradient.addColorStop(1, "#04060c");
   ctx.fillStyle = gradient;
   ctx.fillRect(state.offsetX, state.offsetY, state.viewW, state.viewH);
 }
 
 function drawGlow(x, y, radius, alpha) {
   if (radius <= 0.5) return;
-  const gradient = ctx.createRadialGradient(x, y, radius * 0.05, x, y, radius);
-  gradient.addColorStop(0, `rgba(244, 254, 255, ${0.95 * alpha})`);
-  gradient.addColorStop(0.16, `rgba(126, 249, 255, ${0.5 * alpha})`);
-  gradient.addColorStop(0.42, `rgba(70, 190, 255, ${0.16 * alpha})`);
-  gradient.addColorStop(1, "rgba(70, 190, 255, 0)");
+  const gradient = ctx.createRadialGradient(x, y, radius * 0.04, x, y, radius);
+  gradient.addColorStop(0, `rgba(244, 254, 255, ${0.92 * alpha})`);
+  gradient.addColorStop(0.22, `rgba(126, 249, 255, ${0.62 * alpha})`);
+  gradient.addColorStop(0.55, `rgba(70, 190, 255, ${0.28 * alpha})`);
+  gradient.addColorStop(0.82, `rgba(50, 140, 210, ${0.08 * alpha})`);
+  gradient.addColorStop(1, "rgba(40, 110, 180, 0)");
   ctx.fillStyle = gradient;
   ctx.beginPath();
   ctx.arc(x, y, radius, 0, Math.PI * 2);
@@ -427,26 +427,48 @@ function drawCore(x, y, radius) {
   ctx.fill();
 }
 
-function drawEnemy(enemy) {
-  const rose = enemy.hue === "rose";
-  ctx.save();
-  ctx.lineJoin = "round";
-  ctx.shadowColor = rose ? "rgba(255, 45, 85, 0.9)" : "rgba(190, 90, 255, 0.9)";
-  ctx.shadowBlur = Math.max(8, enemy.r * 0.35);
-  ctx.fillStyle = rose ? "#12060c" : "#0e0716";
-  ctx.strokeStyle = rose ? "#ff2d55" : "#c06bff";
-  ctx.lineWidth = Math.max(2, enemy.r * 0.075);
+function traceEnemy(enemy) {
   ctx.beginPath();
   if (enemy.kind === "diamond") {
     const points = diamondPoints(enemy.x, enemy.y, enemy.r);
     ctx.moveTo(points[0].x, points[0].y);
     for (let i = 1; i < points.length; i += 1) ctx.lineTo(points[i].x, points[i].y);
     ctx.closePath();
-  } else {
-    ctx.arc(enemy.x, enemy.y, enemy.r, 0, Math.PI * 2);
+    return;
   }
+  ctx.arc(enemy.x, enemy.y, enemy.r, 0, Math.PI * 2);
+}
+
+/** How much of a shadow the light reveals. Outside the glow they stay almost hidden. */
+function visionOf(enemy) {
+  const player = state.player;
+  const distance = Math.hypot(enemy.x - player.x, enemy.y - player.y);
+  const nearest = Math.max(0, distance - enemy.r * 0.3);
+  const reach = Math.max(player.lightRadius, 1);
+  const linear = clamp(1 - nearest / reach, 0, 1);
+  const eased = linear * linear * (3 - 2 * linear);
+  return 0.05 + eased * 0.95;
+}
+
+/** A shadow darker than the background. The player's light, drawn behind it, is what reveals the shape. */
+function drawEnemy(enemy) {
+  const seen = visionOf(enemy);
+  ctx.save();
+  ctx.globalAlpha = seen;
+  const gradient = ctx.createRadialGradient(
+    enemy.x,
+    enemy.y,
+    enemy.r * 0.2,
+    enemy.x,
+    enemy.y,
+    enemy.r,
+  );
+  gradient.addColorStop(0, "#010206");
+  gradient.addColorStop(0.72, "#02030a");
+  gradient.addColorStop(1, "rgba(2, 3, 10, 0)");
+  ctx.fillStyle = gradient;
+  traceEnemy(enemy);
   ctx.fill();
-  ctx.stroke();
   ctx.restore();
 }
 
