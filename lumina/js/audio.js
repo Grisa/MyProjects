@@ -4,20 +4,41 @@
  */
 
 const MUTE_KEY = "lumina-muted";
-const HIGH = [523.25, 587.33, 659.25, 783.99, 880];
-const LOW = [196, 220, 261.63, 329.63, 392];
+const VOICE = [0.18, 0.09, 0.04];
+const CHORDS = [
+  [73.42, 110, 174.61],
+  [87.31, 130.81, 220],
+  [65.41, 98, 146.83],
+  [110, 164.81, 246.94],
+];
+const MELODY = [
+  [349.23, 440, 523.25],
+  [349.23, 440, 523.25],
+  [392, 523.25, 587.33],
+  [440, 523.25, 659.25],
+];
+const NEIGHBORS = [
+  [1, 3],
+  [2, 0],
+  [1, 3],
+  [0, 2],
+];
 
 let audio = null;
 let master = null;
 let music = null;
 let sfx = null;
 let color = null;
-let shimmer = null;
 let noise = null;
 let muted = loadMuted();
+let layers = [];
+let active = 0;
+let chordIndex = 0;
+let nextChord = 0;
 let nextBell = 0;
 let lastFollow = -1;
 let lastMode = "";
+let lastLight = -1;
 
 function loadMuted() {
   try {
@@ -55,7 +76,7 @@ function ensure() {
   color = filter.frequency;
 
   music = audio.createGain();
-  music.gain.value = 0.16;
+  music.gain.value = 0.14;
   music.connect(filter);
   filter.connect(master);
 
@@ -63,38 +84,20 @@ function ensure() {
   sfx.gain.value = 0.85;
   sfx.connect(master);
 
-  const bed = [
-    { freq: 73.42, type: "sine", gain: 0.34, lfo: 0.045 },
-    { freq: 110, type: "sine", gain: 0.2, lfo: 0.06 },
-    { freq: 146.83, type: "triangle", gain: 0.07, lfo: 0.08 },
-    { freq: 220, type: "sine", gain: 0.05, lfo: 0.05 },
-  ];
-  for (const voice of bed) {
+  layers = [0, 1].map((layer) => VOICE.map((amount, index) => {
     const osc = audio.createOscillator();
-    osc.type = voice.type;
-    osc.frequency.value = voice.freq;
+    osc.type = index === 1 ? "triangle" : "sine";
+    osc.frequency.value = CHORDS[0][index];
     const gain = audio.createGain();
-    gain.gain.value = voice.gain;
-    const lfo = audio.createOscillator();
-    lfo.frequency.value = voice.lfo;
-    const depth = audio.createGain();
-    depth.gain.value = voice.gain * 0.4;
-    lfo.connect(depth);
-    depth.connect(gain.gain);
+    gain.gain.value = layer === 0 ? amount : 0.0001;
     osc.connect(gain);
     gain.connect(music);
     osc.start();
-    lfo.start();
-  }
-
-  const air = audio.createOscillator();
-  air.type = "sine";
-  air.frequency.value = 440;
-  shimmer = audio.createGain();
-  shimmer.gain.value = 0.03;
-  air.connect(shimmer);
-  shimmer.connect(music);
-  air.start();
+    return { osc, gain, amount };
+  }));
+  active = 0;
+  chordIndex = 0;
+  nextChord = audio.currentTime + 9;
 
   const seconds = 1;
   const buffer = audio.createBuffer(1, audio.sampleRate * seconds, audio.sampleRate);
@@ -177,25 +180,50 @@ function rustle(duration, frequency, peak) {
   source.stop(now + duration + 0.02);
 }
 
+function stepChord(light) {
+  const now = audio.currentTime;
+  if (now < nextChord || layers.length < 2) return;
+  const options = NEIGHBORS[chordIndex];
+  chordIndex = options[Math.floor(Math.random() * options.length)];
+  const idle = 1 - active;
+  const arriving = layers[idle];
+  const leaving = layers[active];
+  arriving.forEach((voice, index) => {
+    voice.osc.frequency.setValueAtTime(CHORDS[chordIndex][index], now);
+    const level = index === 2 ? voice.amount * light : voice.amount;
+    voice.gain.gain.setTargetAtTime(Math.max(0.0001, level), now, 0.9);
+  });
+  leaving.forEach((voice) => {
+    voice.gain.gain.setTargetAtTime(0.0001, now, 0.9);
+  });
+  active = idle;
+  nextChord = now + 10 + Math.random() * 6;
+}
+
 export function follow(mode, light) {
   if (!audio || !music) return;
   const now = audio.currentTime;
+  const amount = Math.max(0, Math.min(1, light));
+  if (mode !== "over" && mode !== "paused") stepChord(amount);
   if (now - lastFollow >= 0.12 || mode !== lastMode) {
     lastFollow = now;
     lastMode = mode;
-    const amount = Math.max(0, Math.min(1, light));
-    const level = mode === "play" ? 0.26 : mode === "over" ? 0.07 : mode === "paused" ? 0.1 : 0.16;
-    music.gain.setTargetAtTime(level, now, 0.4);
-    color?.setTargetAtTime(380 + amount * 1500, now, 0.5);
-    shimmer?.gain.setTargetAtTime(0.012 + amount * 0.05, now, 0.5);
+    const level = mode === "play" ? 0.2 : mode === "over" ? 0.05 : mode === "paused" ? 0.08 : 0.13;
+    music.gain.setTargetAtTime(level, now, 0.5);
+    color?.setTargetAtTime(460 + amount * 1100, now, 0.6);
+    if (Math.abs(amount - lastLight) > 0.05) {
+      lastLight = amount;
+      const high = layers[active]?.[2];
+      if (high) high.gain.gain.setTargetAtTime(Math.max(0.0001, high.amount * amount), now, 0.7);
+    }
   }
   if (muted || mode === "over" || mode === "paused" || now < nextBell) return;
-  const amount = Math.max(0, Math.min(1, light));
-  const scale = amount < 0.45 ? LOW : HIGH;
-  const note = scale[Math.floor(Math.random() * scale.length)];
-  tone(note, 1.15, 0.04, "sine", music);
-  if (Math.random() < 0.35) tone(note * 1.5, 1.3, 0.018, "sine", music);
-  nextBell = now + (mode === "play" ? 3.1 : 5.2) + Math.random() * 2.4;
+  nextBell = now + (mode === "play" ? 7 : 11) + Math.random() * 7;
+  if (Math.random() < 0.42) return;
+  const scale = MELODY[chordIndex];
+  let note = scale[Math.floor(Math.random() * scale.length)];
+  if (amount < 0.45) note *= 0.5;
+  tone(note, 1.8, 0.022, "sine", music);
 }
 
 export function playBegin() {
