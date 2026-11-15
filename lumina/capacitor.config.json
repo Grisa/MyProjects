@@ -1,7 +1,7 @@
 {
   "appId": "com.lumina.game",
   "appName": "Lumina",
-  "webDir": ".",
+  "webDir": "www",
   "server": {
     "androidScheme": "https"
   }

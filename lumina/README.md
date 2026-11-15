@@ -34,14 +34,21 @@ O jogo está pronto para virar o app. Ainda não dá para enviar a ficha: isso u
 1. Crie a conta de desenvolvedor na Google Play Console.
 2. No AdMob, crie o app e um bloco **intersticial**. Cole o ID do app e o ID do bloco em `js/ads.js` (`appId` e `interstitialId`) e mude `testing` para `false`. Enquanto `testing` estiver `true`, o app usa o anúncio de teste da Google.
 3. Troque `appId` em `capacitor.config.json` para o identificador definitivo, no formato `com.seudominio.lumina`, antes de gerar o Android.
-4. Na pasta `lumina`:
+4. Na pasta `lumina`. O Capacitor não aceita a raiz como `webDir`, então a cópia que entra no app fica em `www`. O navegador continua abrindo a raiz.
 
    ```bash
    npm install
+   rm -rf www
+   mkdir www
+   cp -a index.html css js fonts icon.svg manifest.webmanifest www/
    npx cap add android
    ```
 
-   O `webDir` é a própria pasta do jogo. Se `node_modules` estiver aqui na hora do `npx cap sync`, o app leva essas dependências junto. Apague `node_modules`, rode o sync e instale de novo se o projeto Android ficar grande.
+   No `android/build.gradle`, dentro de `buildscript.dependencies`, acrescente o Kotlin que o anúncio usa:
+
+   ```gradle
+   classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.10"
+   ```
 5. Em `android/app/src/main/AndroidManifest.xml`, na activity principal, fixe a orientação:
 
    ```xml
@@ -56,9 +63,16 @@ O jogo está pronto para virar o app. Ainda não dá para enviar a ficha: isso u
        android:value="ca-app-pub-3940256099942544~3347511713" />
    ```
 
-6. Gere o ícone adaptativo a partir de `icon.svg` (a loja pede PNG de 512 px, além dos tamanhos do Android).
-7. No Android Studio, crie um keystore de upload e gere o Android App Bundle assinado (Build, Generate Signed Bundle). Guarde o keystore fora do git.
-8. Na Play Console, preencha a ficha: texto, ícone, gráfico de destaque, capturas em retrato, classificação etária e uma URL pública de política de privacidade. Use o `targetSdk` que a loja exigir na data do envio. Na seção de segurança dos dados, declare que o anúncio é da Google.
+6. Para instalar no celular sem a loja, ainda na pasta `android`:
+
+   ```bash
+   ./gradlew assembleDebug
+   ```
+
+   O APK fica em `app/build/outputs/apk/debug/app-debug.apk`. Ele é assinado com a chave de debug. A Play Store pede o bundle assinado com o seu keystore, no passo seguinte.
+7. Gere o ícone adaptativo a partir de `icon.svg` (a loja pede PNG de 512 px, além dos tamanhos do Android).
+8. No Android Studio, crie um keystore de upload e gere o Android App Bundle assinado (Build, Generate Signed Bundle). Guarde o keystore fora do git.
+9. Na Play Console, preencha a ficha: texto, ícone, gráfico de destaque, capturas em retrato, classificação etária e uma URL pública de política de privacidade. Use o `targetSdk` que a loja exigir na data do envio. Na seção de segurança dos dados, declare que o anúncio é da Google.
 
 O anúncio abre em tela cheia a cada duas mortes, depois que a luz apaga. No navegador ele não aparece. Texto que pode ir na política: o Lumina não tem conta. Recorde, faíscas e melhorias ficam no aparelho. No app Android, o AdMob pode receber identificadores do aparelho para mostrar o anúncio.
 
