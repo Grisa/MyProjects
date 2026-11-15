@@ -4,7 +4,9 @@
  */
 
 const MUTE_KEY = "lumina-muted";
-const VOICE = [0.18, 0.09, 0.04];
+const MUSIC_KEY = "lumina-music";
+const SFX_KEY = "lumina-sfx";
+const VOICE = [0.46, 0.24, 0.12];
 const CHORDS = [
   [73.42, 110, 174.61],
   [87.31, 130.81, 220],
@@ -31,6 +33,9 @@ let sfx = null;
 let color = null;
 let noise = null;
 let muted = loadMuted();
+let musicVolume = loadVolume(MUSIC_KEY, muted ? 0 : 0.9);
+let sfxVolume = loadVolume(SFX_KEY, muted ? 0 : 0.75);
+let musicMix = 0.7;
 let layers = [];
 let active = 0;
 let chordIndex = 0;
@@ -48,8 +53,62 @@ function loadMuted() {
   }
 }
 
+function loadVolume(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw == null || raw === "") return fallback;
+    const value = Number(raw);
+    if (Number.isFinite(value)) return Math.max(0, Math.min(1, value));
+  } catch {
+    /* The slider falls back to the built-in level. */
+  }
+  return fallback;
+}
+
+function saveVolume(key, value) {
+  try {
+    localStorage.setItem(key, String(value));
+  } catch {
+    /* The slider still holds until the page closes. */
+  }
+}
+
 export function isMuted() {
-  return muted;
+  return muted || (musicVolume <= 0.001 && sfxVolume <= 0.001);
+}
+
+export function getMusicVolume() {
+  return musicVolume;
+}
+
+export function getSfxVolume() {
+  return sfxVolume;
+}
+
+function musicBus() {
+  return musicMix * musicVolume;
+}
+
+function syncMute() {
+  const silent = musicVolume <= 0.001 && sfxVolume <= 0.001;
+  if (silent === muted) return;
+  muted = silent;
+  saveMuted();
+  applyMute();
+}
+
+export function setMusicVolume(value) {
+  musicVolume = Math.max(0, Math.min(1, value));
+  saveVolume(MUSIC_KEY, musicVolume);
+  syncMute();
+  if (music && audio) music.gain.setTargetAtTime(musicBus(), audio.currentTime, 0.04);
+}
+
+export function setSfxVolume(value) {
+  sfxVolume = Math.max(0, Math.min(1, value));
+  saveVolume(SFX_KEY, sfxVolume);
+  syncMute();
+  if (sfx && audio) sfx.gain.setTargetAtTime(sfxVolume, audio.currentTime, 0.04);
 }
 
 function saveMuted() {
@@ -76,12 +135,12 @@ function ensure() {
   color = filter.frequency;
 
   music = audio.createGain();
-  music.gain.value = 0.14;
+  music.gain.value = musicBus();
   music.connect(filter);
   filter.connect(master);
 
   sfx = audio.createGain();
-  sfx.gain.value = 0.85;
+  sfx.gain.value = sfxVolume;
   sfx.connect(master);
 
   layers = [0, 1].map((layer) => VOICE.map((amount, index) => {
@@ -216,8 +275,8 @@ export function follow(mode, light) {
   if (now - lastFollow >= 0.12 || mode !== lastMode) {
     lastFollow = now;
     lastMode = mode;
-    const level = mode === "play" ? 0.2 : mode === "over" ? 0.05 : mode === "paused" ? 0.08 : 0.13;
-    music.gain.setTargetAtTime(level, now, 0.5);
+    musicMix = mode === "play" ? 1 : mode === "over" ? 0.42 : mode === "paused" ? 0.55 : 0.78;
+    music.gain.setTargetAtTime(musicBus(), now, 0.5);
     color?.setTargetAtTime(460 + amount * 1100, now, 0.6);
     if (Math.abs(amount - lastLight) > 0.05) {
       lastLight = amount;
@@ -231,7 +290,7 @@ export function follow(mode, light) {
   const scale = MELODY[chordIndex];
   let note = scale[Math.floor(Math.random() * scale.length)];
   if (amount < 0.45) note *= 0.5;
-  tone(note, 0.62, 0.04, "sine", music);
+  tone(note, 0.62, 0.16, "sine", music);
 }
 
 export function playBegin() {

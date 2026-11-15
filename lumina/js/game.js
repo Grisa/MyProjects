@@ -9,11 +9,12 @@ import {
   lerp,
   passScore,
 } from "./math.js";
-import { UPGRADES, bonuses, canBuy, nodeState, upgradeById } from "./upgrades.js";
+import { UPGRADES, bonuses, canBuy, nodeGlow, nodeState, upgradeById } from "./upgrades.js";
 import { initAds, noteDeath } from "./ads.js";
 import {
   follow,
-  isMuted,
+  getMusicVolume,
+  getSfxVolume,
   playBegin,
   playBuy,
   playDeath,
@@ -23,7 +24,8 @@ import {
   playPass,
   playSpark,
   playTap,
-  toggleMuted,
+  setMusicVolume,
+  setSfxVolume,
   unlock,
 } from "./audio.js";
 
@@ -48,7 +50,6 @@ const KINDS = [
   { kind: "lantern", tint: "copper", weight: 14, scale: 1.08 },
   { kind: "grin", tint: "blue", weight: 10, scale: 1.02 },
 ];
-const FOLLOW = 14;
 const LIGHT_LERP = 4.2;
 const SHAKE_DECAY = 2.1;
 const MAX_DT = 0.05;
@@ -77,6 +78,9 @@ const state = {
   dying: false,
   guardUsed: false,
   hintSeen: loadHintSeen(),
+  settingsReturn: "menu",
+  confirmErase: false,
+  dragSlider: null,
   width: 0,
   height: 0,
   viewW: 0,
@@ -434,6 +438,10 @@ function hurt(enemy) {
 }
 
 function update(dt) {
+  if (state.mode === "settings") {
+    follow("menu", 0.85);
+    return;
+  }
   if (state.mode === "paused") {
     const pausedLight = state.player?.initialLight
       ? state.player.lightRadius / state.player.initialLight
@@ -622,30 +630,50 @@ function capturePointer(event) {
   }
 }
 
-function muteRect() {
-  const size = Math.max(44, unit() * 0.09);
-  return {
-    x: state.viewW - size - 12,
-    y: Math.max(12, state.safeTop + 8),
-    w: size,
-    h: size,
-  };
+function settingsRect() {
+  const w = Math.max(112, unit() * 0.3);
+  const h = Math.max(44, unit() * 0.08);
+  const y = Math.max(12, state.safeTop + 8);
+  if (state.mode === "play" || state.mode === "paused") {
+    return { x: state.viewW - w - 12, y, w, h };
+  }
+  return { x: 14, y, w, h };
 }
 
-function onMute() {
-  const silent = toggleMuted();
-  announce(silent ? "Som desligado." : "Som ligado.");
+function openSettings() {
+  if (state.mode === "play") pauseRun();
+  state.settingsReturn = state.mode === "paused" ? "paused" : state.mode;
+  state.confirmErase = false;
+  state.dragSlider = null;
+  state.mode = "settings";
+  playTap();
+  announce("Ajustes.");
+}
+
+function closeSettings() {
+  state.confirmErase = false;
+  state.dragSlider = null;
+  state.mode = state.settingsReturn || "menu";
+  if (state.mode === "paused") announce("Pausado. Toque para continuar.");
+  else if (state.mode === "over") announce(`Fim de jogo. Pontos ${state.score}. Recorde ${state.highScore}.`);
+  else announce(menuLine());
 }
 
 function onPointerDown(event) {
   if (event.button != null && event.button !== 0) return;
   event.preventDefault();
   const point = playfieldPoint(event.clientX, event.clientY);
-  if (state.mode !== "tree" && insideRect(point.x, point.y, muteRect())) {
-    onMute();
+  if (state.mode !== "tree" && state.mode !== "settings" && insideRect(point.x, point.y, settingsRect())) {
+    unlock();
+    openSettings();
     return;
   }
   unlock();
+  if (state.mode === "settings") {
+    onSettingsDown(point.x, point.y);
+    if (state.dragSlider) capturePointer(event);
+    return;
+  }
   if (state.mode === "paused") {
     resumeRun(point.x);
     capturePointer(event);
@@ -693,14 +721,18 @@ function onPointerDown(event) {
 
 function onPointerMove(event) {
   const point = playfieldPoint(event.clientX, event.clientY);
+  if (state.mode === "settings" && state.dragSlider) {
+    setSlider(state.dragSlider, point.x);
+    return;
+  }
   if (state.mode === "tree" && state.gesture?.id === event.pointerId) {
     const gesture = state.gesture;
     if (!gesture.dragged && Math.hypot(point.x - gesture.sx, point.y - gesture.sy) > 12) {
       gesture.dragged = true;
     }
     if (gesture.dragged) {
-      state.treePanX = clamp(state.treePanX + point.x - gesture.x, -180, 180);
-      state.treePanY = clamp(state.treePanY + point.y - gesture.y, -160, 200);
+      state.treePanX = clamp(state.treePanX + point.x - gesture.x, -280, 280);
+      state.treePanY = clamp(state.treePanY + point.y - gesture.y, -360, 360);
       gesture.x = point.x;
       gesture.y = point.y;
     }
@@ -711,6 +743,8 @@ function onPointerMove(event) {
 }
 
 function onPointerUp(event) {
+  if (state.dragSlider === "sfx") playTap();
+  state.dragSlider = null;
   if (state.mode === "tree" && state.gesture?.id === event.pointerId) {
     if (!state.gesture.dragged) onTreeTap(state.gesture.sx, state.gesture.sy);
     state.gesture = null;
@@ -995,13 +1029,28 @@ function drawScore() {
   ctx.restore();
 }
 
+function treeSpan() {
+  let minCol = 0;
+  let maxCol = 0;
+  let minRow = 0;
+  let maxRow = 0;
+  for (const upgrade of UPGRADES) {
+    minCol = Math.min(minCol, upgrade.col);
+    maxCol = Math.max(maxCol, upgrade.col);
+    minRow = Math.min(minRow, upgrade.row);
+    maxRow = Math.max(maxRow, upgrade.row);
+  }
+  return { minCol, maxCol, minRow, maxRow };
+}
+
 function treeMetrics() {
-  const spanX = 4;
+  const span = treeSpan();
+  const spanX = Math.max(1, span.maxCol - span.minCol);
   const pitchX = Math.min(84, (state.viewW - 24) / (spanX + 0.62));
-  const pitchY = Math.min(78, state.viewH * 0.096);
+  const pitchY = Math.min(78, state.viewH * 0.09);
   const node = Math.min(50, pitchX * 0.56);
-  const originX = (state.viewW - pitchX * spanX) / 2 + state.treePanX;
-  const originY = state.safeTop + state.viewH * 0.15 + state.treePanY;
+  const originX = (state.viewW - pitchX * spanX) / 2 - span.minCol * pitchX + state.treePanX;
+  const originY = state.safeTop + state.viewH * 0.16 - span.minRow * pitchY + state.treePanY;
   return { pitchX, pitchY, node, originX, originY };
 }
 
@@ -1277,12 +1326,12 @@ function drawTree() {
     const child = nodePoint(upgrade, metrics);
     for (const parentId of upgrade.requires) {
       const parent = nodePoint(upgradeById(parentId), metrics);
-      const childState = nodeState(upgrade, state.owned);
-      ctx.strokeStyle = childState === "owned"
-        ? "rgba(61, 222, 106, 0.85)"
-        : childState === "available"
-          ? "rgba(255, 216, 74, 0.8)"
-          : "rgba(120, 36, 48, 0.9)";
+      const childState = nodeGlow(upgrade, state.owned, state.sparks);
+      ctx.strokeStyle = childState === "bright"
+        ? "rgba(186, 244, 255, 0.9)"
+        : childState === "soft"
+          ? "rgba(150, 200, 220, 0.5)"
+          : "rgba(70, 84, 96, 0.28)";
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(parent.x, parent.y);
@@ -1293,15 +1342,29 @@ function drawTree() {
 
   for (const upgrade of UPGRADES) {
     const box = nodeBox(upgrade, metrics);
-    const status = nodeState(upgrade, state.owned);
-    const border = status === "owned" ? "#3dde6a" : status === "available" ? "#ffd84a" : "#ff3344";
-    const ink = status === "locked" ? "rgba(255, 150, 160, 0.55)" : "#f4fff8";
-    ctx.fillStyle = "#12141c";
+    const glow = nodeGlow(upgrade, state.owned, state.sparks);
+    const selected = upgrade.id === state.selectedId;
+    if (glow === "bright") drawGlow(box.cx, box.cy, box.w * 0.95, 0.85);
+    else if (glow === "soft") drawGlow(box.cx, box.cy, box.w * 0.72, 0.28);
+    ctx.fillStyle = glow === "dim" ? "#080a10" : "#121820";
+    ctx.globalAlpha = glow === "dim" ? 0.72 : 1;
     roundRect(box.x, box.y, box.w, box.h, 10);
     ctx.fill();
-    ctx.lineWidth = upgrade.id === state.selectedId ? 3.5 : 2.5;
-    ctx.strokeStyle = border;
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = selected ? 3.2 : 1.6;
+    ctx.strokeStyle = glow === "bright"
+      ? "rgba(244, 254, 255, 0.95)"
+      : glow === "soft"
+        ? "rgba(186, 230, 244, 0.7)"
+        : selected
+          ? "rgba(180, 196, 208, 0.45)"
+          : "rgba(70, 84, 96, 0.35)";
     ctx.stroke();
+    const ink = glow === "bright"
+      ? "#f7feff"
+      : glow === "soft"
+        ? "rgba(214, 236, 244, 0.9)"
+        : "rgba(150, 166, 176, 0.32)";
     drawIcon(upgrade.icon, box.cx, box.cy, box.w, ink);
   }
   ctx.restore();
@@ -1329,10 +1392,10 @@ function drawTree() {
         ? `Comprar · ${selected.cost}`
         : `Precisa de ${selected.cost}`;
   const accent = status === "owned"
-    ? "rgba(61, 222, 106, 0.9)"
+    ? "rgba(186, 244, 255, 0.95)"
     : affordable
-      ? "rgba(255, 216, 74, 0.95)"
-      : "rgba(255, 80, 96, 0.75)";
+      ? "rgba(186, 220, 232, 0.7)"
+      : "rgba(90, 104, 116, 0.45)";
   drawPill(buy, label, accent);
 }
 
@@ -1446,7 +1509,7 @@ function drawMenu() {
   ctx.restore();
   drawSparkCount(x, sparkY, "center");
   drawPill(button, "Melhorias", "rgba(255, 214, 120, 0.9)");
-  drawMute();
+  drawSettingsButton();
 }
 
 function roundRect(x, y, w, h, radius) {
@@ -1493,46 +1556,169 @@ function drawGameOver() {
   ctx.font = font(Math.max(16, unit() * 0.04), 600);
   ctx.fillText("Jogar novamente", x, button.y + button.h / 2);
   drawPill(buttonRect(0.7), "Melhorias", "rgba(255, 214, 120, 0.9)");
-  drawMute();
+  drawSettingsButton();
 }
 
-function drawMute() {
-  const rect = muteRect();
-  const silent = isMuted();
-  ctx.save();
-  ctx.translate(rect.x + rect.w / 2, rect.y + rect.h / 2);
-  const s = rect.w * 0.22;
-  ctx.fillStyle = "rgba(4, 6, 12, 0.62)";
-  ctx.beginPath();
-  ctx.arc(0, 0, rect.w * 0.34, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = "rgba(214, 232, 240, 0.78)";
-  ctx.lineWidth = 1.6;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.beginPath();
-  ctx.moveTo(-s * 0.15, -s * 0.38);
-  ctx.lineTo(-s * 0.72, -s * 0.38);
-  ctx.lineTo(-s * 0.72, s * 0.38);
-  ctx.lineTo(-s * 0.15, s * 0.38);
-  ctx.lineTo(s * 0.42, s * 0.9);
-  ctx.lineTo(s * 0.42, -s * 0.9);
-  ctx.closePath();
-  ctx.stroke();
-  if (silent) {
-    ctx.beginPath();
-    ctx.moveTo(s * 0.15, -s * 0.72);
-    ctx.lineTo(s * 1.15, s * 0.72);
-    ctx.stroke();
-  } else {
-    ctx.beginPath();
-    ctx.arc(s * 0.28, 0, s * 0.48, -0.75, 0.75);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(s * 0.28, 0, s * 0.9, -0.62, 0.62);
-    ctx.stroke();
+function drawSettingsButton() {
+  drawPill(settingsRect(), "Ajustes", "rgba(190, 248, 255, 0.7)");
+}
+
+function sliderTrack(which) {
+  const w = Math.min(state.viewW * 0.78, 340);
+  const y = which === "music" ? state.viewH * 0.36 : state.viewH * 0.52;
+  return { x: (state.viewW - w) / 2, y, w, h: 44 };
+}
+
+function setSlider(which, x) {
+  const rect = sliderTrack(which);
+  const value = clamp((x - rect.x) / rect.w, 0, 1);
+  if (which === "music") setMusicVolume(value);
+  else setSfxVolume(value);
+}
+
+function eraseRect() {
+  return buttonRect(0.74);
+}
+
+function confirmCard() {
+  const w = Math.min(state.viewW - 40, 340);
+  const h = 220;
+  return { x: (state.viewW - w) / 2, y: state.viewH * 0.3, w, h };
+}
+
+function confirmButtons() {
+  const card = confirmCard();
+  const gap = 12;
+  const w = (card.w - 36 - gap) / 2;
+  const y = card.y + card.h - 58;
+  return {
+    erase: { x: card.x + 18, y, w, h: 44 },
+    cancel: { x: card.x + 18 + w + gap, y, w, h: 44 },
+  };
+}
+
+function eraseProgress() {
+  state.sparks = 0;
+  state.owned = new Set();
+  state.highScore = 0;
+  state.hintSeen = false;
+  state.selectedId = "centelha";
+  try {
+    localStorage.removeItem(SPARKS_KEY);
+    localStorage.removeItem(UPGRADES_KEY);
+    localStorage.removeItem(HIGH_SCORE_KEY);
+    localStorage.removeItem(HINT_KEY);
+  } catch {
+    /* The memory copy is already empty. */
   }
+  state.confirmErase = false;
+  announce("Dados apagados.");
+}
+
+function onSettingsDown(x, y) {
+  if (state.confirmErase) {
+    const buttons = confirmButtons();
+    if (insideRect(x, y, buttons.erase)) {
+      eraseProgress();
+      playTap();
+    } else if (insideRect(x, y, buttons.cancel) || !insideRect(x, y, confirmCard())) {
+      state.confirmErase = false;
+      playTap();
+    }
+    return;
+  }
+  if (insideRect(x, y, backRect())) {
+    closeSettings();
+    return;
+  }
+  if (insideRect(x, y, eraseRect())) {
+    state.confirmErase = true;
+    playTap();
+    announce("Confirmar para apagar os dados.");
+    return;
+  }
+  if (insideRect(x, y, sliderTrack("music"))) {
+    state.dragSlider = "music";
+    setSlider("music", x);
+    return;
+  }
+  if (insideRect(x, y, sliderTrack("sfx"))) {
+    state.dragSlider = "sfx";
+    setSlider("sfx", x);
+  }
+}
+
+function drawSlider(which, label) {
+  const rect = sliderTrack(which);
+  const value = which === "music" ? getMusicVolume() : getSfxVolume();
+  ctx.save();
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#f4feff";
+  ctx.font = font(Math.max(16, unit() * 0.04), 600);
+  ctx.fillText(label, rect.x, rect.y - 18);
+  ctx.textAlign = "right";
+  ctx.fillStyle = "rgba(210, 226, 236, 0.8)";
+  ctx.fillText(`${Math.round(value * 100)}%`, rect.x + rect.w, rect.y - 18);
+  const trackY = rect.y + rect.h / 2;
+  ctx.lineCap = "round";
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = "rgba(120, 150, 168, 0.45)";
+  ctx.beginPath();
+  ctx.moveTo(rect.x, trackY);
+  ctx.lineTo(rect.x + rect.w, trackY);
+  ctx.stroke();
+  ctx.strokeStyle = value > 0.02 ? "rgba(186, 244, 255, 0.95)" : "rgba(120, 150, 168, 0.45)";
+  ctx.beginPath();
+  ctx.moveTo(rect.x, trackY);
+  ctx.lineTo(rect.x + rect.w * value, trackY);
+  ctx.stroke();
+  ctx.fillStyle = "#f7feff";
+  ctx.shadowColor = "rgba(126, 249, 255, 0.85)";
+  ctx.shadowBlur = value > 0.02 ? 14 : 0;
+  ctx.beginPath();
+  ctx.arc(rect.x + rect.w * value, trackY, 12, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
+}
+
+function drawConfirmErase() {
+  ctx.fillStyle = "rgba(4, 6, 12, 0.84)";
+  ctx.fillRect(0, 0, state.viewW, state.viewH);
+  const card = confirmCard();
+  ctx.fillStyle = "#0c1018";
+  roundRect(card.x, card.y, card.w, card.h, 18);
+  ctx.fill();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#f4feff";
+  ctx.font = font(Math.max(20, unit() * 0.05), 600);
+  ctx.fillText("Apagar tudo?", state.viewW / 2, card.y + 46);
+  ctx.fillStyle = "rgba(210, 226, 236, 0.82)";
+  ctx.font = font(Math.max(14, unit() * 0.034), 500);
+  ctx.fillText("Recorde, faíscas e melhorias", state.viewW / 2, card.y + 90);
+  ctx.fillText("somem deste aparelho.", state.viewW / 2, card.y + 114);
+  const buttons = confirmButtons();
+  drawPill(buttons.erase, "Apagar", "rgba(255, 96, 110, 0.9)");
+  drawPill(buttons.cancel, "Cancelar", "rgba(190, 248, 255, 0.75)");
+}
+
+function drawSettings() {
+  ctx.fillStyle = "#f4feff";
+  ctx.font = font(Math.max(22, unit() * 0.055), 500);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("Ajustes", state.viewW / 2, backRect().y + 18);
+  drawPill(backRect(), "Voltar", "rgba(190, 248, 255, 0.7)");
+  drawSlider("music", "Música");
+  drawSlider("sfx", "Efeitos");
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "rgba(210, 226, 236, 0.55)";
+  ctx.font = font(Math.max(13, unit() * 0.032), 500);
+  ctx.fillText("Apaga recorde, faíscas e melhorias.", state.viewW / 2, eraseRect().y - 26);
+  drawPill(eraseRect(), "Apagar dados", "rgba(255, 120, 130, 0.5)");
+  if (state.confirmErase) drawConfirmErase();
 }
 
 function drawPlayerGlow() {
@@ -1557,6 +1743,8 @@ function draw() {
 
   if (state.mode === "menu") {
     drawMenu();
+  } else if (state.mode === "settings") {
+    drawSettings();
   } else if (state.mode === "tree") {
     drawTree();
   } else {
@@ -1582,7 +1770,7 @@ function draw() {
       drawScore();
       drawSparkCount(18, Math.max(18, state.safeTop + 18));
       if (state.mode === "paused") drawPaused();
-      drawMute();
+      drawSettingsButton();
     } else drawGameOver();
   }
 

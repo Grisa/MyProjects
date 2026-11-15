@@ -4,11 +4,11 @@ Endless runner vertical. Uma bolinha de luz fica na base da tela e só anda para
 
 Na primeira vez, o menu diz que a luz também é a vida. Sair do app, ou chegar uma notificação por cima, pausa a partida até o próximo toque.
 
-Faíscas caem com menos frequência que os inimigos. Pegar uma devolve um pouco da luz e soma uma faísca. As faíscas ficam salvas neste aparelho e compram melhorias: cada compra libera os próximos nós da árvore. Dá para encolher o núcleo, estender a luz, ver a borda das sombras antes, sobreviver a um golpe fatal, frear a queda, espaçar os inimigos e transformar faísca em ponto.
+Faíscas caem com menos frequência que os inimigos. Pegar uma devolve um pouco da luz e soma uma faísca. As faíscas ficam salvas neste aparelho e compram melhorias, em níveis: Passo 1, 2 e 3 deixam a bolinha seguir o dedo, Luz 1, 2 e 3 aumentam o brilho, Casco 1, 2 e 3 reduzem o dano, Ímã 1, 2 e 3 puxam faíscas. No começo a bolinha responde devagar. Na árvore, o que já foi comprado acende, o que dá para comprar agora tem uma luz fraca, e o resto fica apagado.
 
 No menu, o nome fica fino e quase apagado. A luz da bolinha é que acende as letras. Os inimigos também só mostram o rosto nessa luz: a bolha é sonolenta, o caco é sério, a lasca se assusta e oscila, o vigia observa e o riso sorri.
 
-O som também nasce no aparelho. O fundo troca de acorde a cada poucos segundos, as notas entram e somem, e o grave fica mais fino quando a luz baixa. Faísca, batida e fim de partida têm um efeito curto. O alto-falante no canto desliga o som. A escolha fica em `lumina-muted`. Para ouvir cada um fora da partida, abra `samples.html`.
+O som também nasce no aparelho. O fundo troca de acorde a cada poucos segundos, as notas entram e somem, e o grave fica mais fino quando a luz baixa. Faísca, batida e fim de partida têm um efeito curto. Em Ajustes, a música e os efeitos têm um volume cada um. Apagar dados pede confirmação e zera recorde, faíscas e melhorias. Para ouvir cada som fora da partida, abra `samples.html`.
 
 O recorde fica em `lumina-high-score`. As faíscas e as melhorias compradas ficam em `lumina-sparks` e `lumina-upgrades`. A frase da primeira vez some depois da primeira partida (`lumina-hint`). O navegador guarda isso só no aparelho e não mostra anúncio. No app da Play Store, a cada duas mortes pode abrir um anúncio em tela cheia da Google.
 

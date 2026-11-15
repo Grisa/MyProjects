@@ -5,7 +5,7 @@ export const UPGRADES = [
     id: "centelha",
     name: "Centelha",
     text: "Faíscas devolvem mais luz.",
-    cost: 1,
+    cost: 6,
     col: 1,
     row: 2,
     requires: [],
@@ -13,9 +13,9 @@ export const UPGRADES = [
   },
   {
     id: "passo",
-    name: "Passo",
-    text: "A bolinha segue o dedo mais rápido.",
-    cost: 2,
+    name: "Passo 1",
+    text: "A bolinha responde um pouco melhor.",
+    cost: 12,
     col: 0,
     row: 2,
     requires: ["centelha"],
@@ -23,29 +23,39 @@ export const UPGRADES = [
   },
   {
     id: "reflexo",
-    name: "Reflexo",
-    text: "O movimento fica imediato.",
-    cost: 3,
+    name: "Passo 2",
+    text: "O movimento fica mais firme.",
+    cost: 24,
     col: 0,
     row: 1,
     requires: ["passo"],
     icon: "reflex",
   },
   {
-    id: "miolo",
-    name: "Miolo",
-    text: "O núcleo encolhe e a bolinha sobe.",
-    cost: 4,
+    id: "passo3",
+    name: "Passo 3",
+    text: "A bolinha cola no dedo.",
+    cost: 42,
     col: 0,
     row: 0,
     requires: ["reflexo"],
+    icon: "reflex",
+  },
+  {
+    id: "miolo",
+    name: "Miolo",
+    text: "O núcleo encolhe e a bolinha sobe.",
+    cost: 58,
+    col: 0,
+    row: -1,
+    requires: ["passo3"],
     icon: "core",
   },
   {
     id: "halo",
-    name: "Halo",
-    text: "Você começa com mais luz.",
-    cost: 2,
+    name: "Luz 1",
+    text: "A luz inicial cresce um pouco.",
+    cost: 12,
     col: 1,
     row: 1,
     requires: ["centelha"],
@@ -53,9 +63,9 @@ export const UPGRADES = [
   },
   {
     id: "aurora",
-    name: "Aurora",
-    text: "A luz inicial cresce de novo.",
-    cost: 4,
+    name: "Luz 2",
+    text: "A luz inicial cresce mais.",
+    cost: 24,
     col: 1,
     row: 0,
     requires: ["halo"],
@@ -63,9 +73,9 @@ export const UPGRADES = [
   },
   {
     id: "farol",
-    name: "Farol",
-    text: "A luz alcança mais longe.",
-    cost: 5,
+    name: "Luz 3",
+    text: "A luz alcança bem mais longe.",
+    cost: 42,
     col: 2,
     row: 0,
     requires: ["aurora"],
@@ -75,7 +85,7 @@ export const UPGRADES = [
     id: "vela",
     name: "Vela",
     text: "A borda das sombras aparece antes.",
-    cost: 3,
+    cost: 30,
     col: 3,
     row: 0,
     requires: ["farol"],
@@ -83,9 +93,9 @@ export const UPGRADES = [
   },
   {
     id: "casco",
-    name: "Casco",
-    text: "Cada batida apaga menos luz.",
-    cost: 2,
+    name: "Casco 1",
+    text: "Cada batida apaga um pouco menos.",
+    cost: 12,
     col: 2,
     row: 2,
     requires: ["centelha"],
@@ -93,9 +103,9 @@ export const UPGRADES = [
   },
   {
     id: "muralha",
-    name: "Muralha",
-    text: "O dano fica ainda menor.",
-    cost: 4,
+    name: "Casco 2",
+    text: "O dano fica menor.",
+    cost: 24,
     col: 3,
     row: 2,
     requires: ["casco"],
@@ -105,7 +115,7 @@ export const UPGRADES = [
     id: "respiro",
     name: "Respiro",
     text: "Um golpe fatal deixa um fio de luz.",
-    cost: 6,
+    cost: 50,
     col: 3,
     row: 1,
     requires: ["muralha"],
@@ -115,7 +125,7 @@ export const UPGRADES = [
     id: "pausa",
     name: "Pausa",
     text: "Os inimigos caem mais devagar.",
-    cost: 3,
+    cost: 20,
     col: 3,
     row: 3,
     requires: ["muralha"],
@@ -125,7 +135,7 @@ export const UPGRADES = [
     id: "folga",
     name: "Folga",
     text: "Os inimigos demoram mais a nascer.",
-    cost: 4,
+    cost: 26,
     col: 4,
     row: 2,
     requires: ["muralha"],
@@ -135,7 +145,7 @@ export const UPGRADES = [
     id: "folego",
     name: "Fôlego",
     text: "Sem levar dano, a luz volta aos poucos.",
-    cost: 4,
+    cost: 24,
     col: 2,
     row: 1,
     requires: ["casco"],
@@ -143,9 +153,9 @@ export const UPGRADES = [
   },
   {
     id: "ima",
-    name: "Ímã",
-    text: "Faíscas próximas vêm até você.",
-    cost: 2,
+    name: "Ímã 1",
+    text: "Ímã de faísca fraco.",
+    cost: 12,
     col: 1,
     row: 3,
     requires: ["centelha"],
@@ -155,7 +165,7 @@ export const UPGRADES = [
     id: "abundancia",
     name: "Abundância",
     text: "Caem mais faíscas.",
-    cost: 3,
+    cost: 22,
     col: 0,
     row: 3,
     requires: ["ima"],
@@ -163,9 +173,9 @@ export const UPGRADES = [
   },
   {
     id: "vortice",
-    name: "Vórtice",
-    text: "O ímã puxa de mais longe.",
-    cost: 4,
+    name: "Ímã 2",
+    text: "Ímã de faísca médio.",
+    cost: 24,
     col: 1,
     row: 4,
     requires: ["ima"],
@@ -175,7 +185,7 @@ export const UPGRADES = [
     id: "brasa",
     name: "Brasa",
     text: "Cada faísca vale 2.",
-    cost: 5,
+    cost: 32,
     col: 2,
     row: 3,
     requires: ["ima"],
@@ -185,11 +195,31 @@ export const UPGRADES = [
     id: "prisma",
     name: "Prisma",
     text: "Cada faísca também vale 1 ponto.",
-    cost: 4,
+    cost: 40,
     col: 2,
     row: 4,
     requires: ["brasa"],
     icon: "prism",
+  },
+  {
+    id: "casco3",
+    name: "Casco 3",
+    text: "As batidas apagam bem menos luz.",
+    cost: 42,
+    col: 4,
+    row: 1,
+    requires: ["muralha"],
+    icon: "wall",
+  },
+  {
+    id: "ima3",
+    name: "Ímã 3",
+    text: "Ímã de faísca forte.",
+    cost: 42,
+    col: 1,
+    row: 5,
+    requires: ["vortice"],
+    icon: "magnet",
   },
 ];
 
@@ -208,27 +238,42 @@ export function canBuy(upgrade, owned, sparks) {
   return nodeState(upgrade, owned) === "available" && sparks >= upgrade.cost;
 }
 
+/** bright when bought, soft when it can be bought now, dim otherwise. */
+export function nodeGlow(upgrade, owned, sparks) {
+  const status = nodeState(upgrade, owned);
+  if (status === "owned") return "bright";
+  if (status === "available" && sparks >= upgrade.cost) return "soft";
+  return "dim";
+}
+
 export function bonuses(owned) {
   const has = (id) => owned.has(id);
   let light = 1;
-  if (has("halo")) light += 0.18;
-  if (has("aurora")) light += 0.18;
-  if (has("farol")) light += 0.16;
+  if (has("halo")) light += 0.12;
+  if (has("aurora")) light += 0.14;
+  if (has("farol")) light += 0.18;
 
   let damage = 0.38;
-  if (has("casco")) damage = 0.3;
-  if (has("muralha")) damage = 0.26;
+  if (has("casco")) damage = 0.33;
+  if (has("muralha")) damage = 0.28;
+  if (has("casco3")) damage = 0.22;
 
-  let follow = 14;
-  if (has("passo")) follow = 22;
-  if (has("reflexo")) follow = 32;
+  let follow = 5;
+  if (has("passo")) follow = 11;
+  if (has("reflexo")) follow = 18;
+  if (has("passo3")) follow = 32;
+
+  let magnet = 0;
+  if (has("ima")) magnet = 0.14;
+  if (has("vortice")) magnet = 0.3;
+  if (has("ima3")) magnet = 0.5;
 
   return {
     light,
     damage,
     follow,
     heal: has("centelha") ? 0.34 : 0.2,
-    magnet: has("vortice") ? 0.46 : has("ima") ? 0.24 : 0,
+    magnet,
     sparkInterval: has("abundancia") ? 3.2 : 5,
     sparkValue: has("brasa") ? 2 : 1,
     sparkScore: has("prisma") ? 1 : 0,
