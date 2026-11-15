@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lumina — sons</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: #04060c;
+        color: #d6e8f0;
+        font: 500 16px "Segoe UI", system-ui, sans-serif;
+      }
+      main {
+        max-width: 32rem;
+        margin: 0 auto;
+        padding: 2.5rem 1.25rem 4rem;
+      }
+      h1 {
+        margin: 0 0 0.4rem;
+        font-weight: 500;
+        letter-spacing: 0.28em;
+        font-size: 1.4rem;
+      }
+      p { color: rgba(214, 232, 240, 0.72); line-height: 1.45; }
+      ul { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+      li { margin: 0 0 1.1rem; }
+      span { display: block; margin-bottom: 0.35rem; }
+      audio { width: 100%; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>LUMINA</h1>
+      <p>
+        Estes são os sons do jogo, gravados do mesmo sintetizador. No arquivo eles ficam um pouco mais altos.
+        Dentro da partida, o som só começa no primeiro toque. O alto-falante no canto desliga.
+      </p>
+      <ul>
+        <li><span>Tudo em sequência</span><audio controls src="samples/amostra.wav"></audio></li>
+        <li><span>Fundo, com a luz alta</span><audio controls src="samples/fundo.wav"></audio></li>
+        <li><span>Começar</span><audio controls src="samples/comecar.wav"></audio></li>
+        <li><span>Inimigo passou longe</span><audio controls src="samples/passar.wav"></audio></li>
+        <li><span>Desvio rente</span><audio controls src="samples/rente.wav"></audio></li>
+        <li><span>Faísca</span><audio controls src="samples/faisca.wav"></audio></li>
+        <li><span>Batida</span><audio controls src="samples/batida.wav"></audio></li>
+        <li><span>Escudo</span><audio controls src="samples/escudo.wav"></audio></li>
+        <li><span>Compra</span><audio controls src="samples/comprar.wav"></audio></li>
+        <li><span>Toque de botão</span><audio controls src="samples/toque.wav"></audio></li>
+        <li><span>A luz se apaga</span><audio controls src="samples/apagar.wav"></audio></li>
+      </ul>
+    </main>
+  </body>
+</html>
