@@ -6,7 +6,7 @@ Faíscas caem com menos frequência que os inimigos. Pegar uma devolve um pouco 
 
 No menu, o nome fica fino e quase apagado. A luz da bolinha é que acende as letras. Os inimigos também só mostram o rosto nessa luz: a bolha é sonolenta, o caco é sério, a lasca se assusta e oscila, o vigia observa e o riso sorri.
 
-O recorde fica em `lumina-high-score`. As faíscas e as melhorias compradas ficam em `lumina-sparks` e `lumina-upgrades`. Tudo isso fica só neste aparelho. O jogo não envia dados para lugar nenhum.
+O recorde fica em `lumina-high-score`. As faíscas e as melhorias compradas ficam em `lumina-sparks` e `lumina-upgrades`. O navegador guarda isso só no aparelho e não mostra anúncio. No app da Play Store, a cada duas mortes pode abrir um anúncio em tela cheia da Google.
 
 ## Jogar no computador
 
@@ -25,11 +25,12 @@ Sirva a pasta numa máquina acessível na mesma rede e abra o endereço no naveg
 
 ## Play Store
 
-Esta pasta já é o app web. O Capacitor gera o projeto Android em volta dela. A publicação em si usa a sua conta da Play Console e uma chave de assinatura sua. Nada disso entra no repositório.
+O jogo está pronto para virar o app. Ainda não dá para enviar a ficha: isso usa a sua conta da Play Console, um keystore seu e os IDs do AdMob. Nada disso entra no repositório.
 
 1. Crie a conta de desenvolvedor na Google Play Console.
-2. Troque `appId` em `capacitor.config.json` para o identificador definitivo, no formato `com.seudominio.lumina`, antes de gerar o Android.
-3. Na pasta `lumina`:
+2. No AdMob, crie o app e um bloco **intersticial**. Cole o ID do app e o ID do bloco em `js/ads.js` (`appId` e `interstitialId`) e mude `testing` para `false`. Enquanto `testing` estiver `true`, o app usa o anúncio de teste da Google.
+3. Troque `appId` em `capacitor.config.json` para o identificador definitivo, no formato `com.seudominio.lumina`, antes de gerar o Android.
+4. Na pasta `lumina`:
 
    ```bash
    npm install
@@ -37,16 +38,24 @@ Esta pasta já é o app web. O Capacitor gera o projeto Android em volta dela. A
    ```
 
    O `webDir` é a própria pasta do jogo. Se `node_modules` estiver aqui na hora do `npx cap sync`, o app leva essas dependências junto. Apague `node_modules`, rode o sync e instale de novo se o projeto Android ficar grande.
-4. Em `android/app/src/main/AndroidManifest.xml`, na activity principal, fixe a orientação:
+5. Em `android/app/src/main/AndroidManifest.xml`, na activity principal, fixe a orientação:
 
    ```xml
    android:screenOrientation="portrait"
    ```
 
-5. Gere o ícone adaptativo a partir de `icon.svg` (a loja pede PNG de 512 px, além dos tamanhos do Android).
-6. No Android Studio, crie um keystore de upload e gere o Android App Bundle assinado (Build, Generate Signed Bundle). Guarde o keystore fora do git.
-7. Na Play Console, preencha a ficha: texto, ícone, gráfico de destaque, capturas em retrato, classificação etária e uma URL pública de política de privacidade. Use o `targetSdk` que a loja exigir na data do envio.
+   Dentro de `<application>`, o AdMob exige o ID do app. Use o de teste enquanto `testing` for `true` (`ca-app-pub-3940256099942544~3347511713`) e troque pelo seu antes de publicar:
 
-Texto que pode ir na política: o Lumina não tem conta, anúncio nem rede. A única informação guardada é a maior pontuação, e ela permanece no aparelho.
+   ```xml
+   <meta-data
+       android:name="com.google.android.gms.ads.APPLICATION_ID"
+       android:value="ca-app-pub-3940256099942544~3347511713" />
+   ```
 
-`npm test` cobre colisão (círculo e losango) e a curva de dificuldade. A cada 7 segundos a queda fica 8% mais rápida e o intervalo entre inimigos cai 8%, sem ficar menor que 0,28 s.
+6. Gere o ícone adaptativo a partir de `icon.svg` (a loja pede PNG de 512 px, além dos tamanhos do Android).
+7. No Android Studio, crie um keystore de upload e gere o Android App Bundle assinado (Build, Generate Signed Bundle). Guarde o keystore fora do git.
+8. Na Play Console, preencha a ficha: texto, ícone, gráfico de destaque, capturas em retrato, classificação etária e uma URL pública de política de privacidade. Use o `targetSdk` que a loja exigir na data do envio. Na seção de segurança dos dados, declare que o anúncio é da Google.
+
+O anúncio abre em tela cheia a cada duas mortes, depois que a luz apaga. No navegador ele não aparece. Texto que pode ir na política: o Lumina não tem conta. Recorde, faíscas e melhorias ficam no aparelho. No app Android, o AdMob pode receber identificadores do aparelho para mostrar o anúncio.
+
+`npm test` cobre colisão, a curva de dificuldade, a árvore de melhorias e o ritmo do anúncio. A cada 7 segundos a queda fica 8% mais rápida e o intervalo entre inimigos cai 8%, sem ficar menor que 0,28 s.

@@ -9,6 +9,7 @@ import {
   lerp,
 } from "./math.js";
 import { UPGRADES, bonuses, canBuy, nodeState, upgradeById } from "./upgrades.js";
+import { initAds, noteDeath } from "./ads.js";
 
 const HIGH_SCORE_KEY = "lumina-high-score";
 const SPARKS_KEY = "lumina-sparks";
@@ -258,6 +259,7 @@ function endRun() {
   state.dying = false;
   state.pointerId = null;
   announce(`Fim de jogo. Pontos ${state.score}. Recorde ${state.highScore}.`);
+  noteDeath();
 }
 
 function pickKind() {
@@ -1418,5 +1420,6 @@ document.fonts?.load('100 64px "Lumina Sans"');
 document.fonts?.load('500 28px "Lumina Sans"');
 document.fonts?.load('700 64px "Lumina Sans"');
 announce(state.highScore > 0 ? `Toque para jogar. Recorde ${state.highScore}.` : "Toque para jogar.");
+initAds();
 state.last = performance.now();
 requestAnimationFrame(frame);
