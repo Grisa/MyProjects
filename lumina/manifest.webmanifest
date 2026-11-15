@@ -1,0 +1,19 @@
+{
+  "name": "Lumina",
+  "short_name": "Lumina",
+  "description": "Desvie da escuridão e mantenha a luz acesa.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#05060f",
+  "theme_color": "#05060f",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
