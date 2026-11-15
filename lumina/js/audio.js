@@ -89,7 +89,7 @@ function ensure() {
     osc.type = index === 1 ? "triangle" : "sine";
     osc.frequency.value = CHORDS[0][index];
     const gain = audio.createGain();
-    gain.gain.value = layer === 0 ? amount : 0.0001;
+    gain.gain.value = 0.0001;
     osc.connect(gain);
     gain.connect(music);
     osc.start();
@@ -97,7 +97,13 @@ function ensure() {
   }));
   active = 0;
   chordIndex = 0;
-  nextChord = audio.currentTime + 9;
+  const start = audio.currentTime;
+  layers[0].forEach((voice) => {
+    voice.gain.gain.setValueAtTime(0.0001, start);
+    voice.gain.gain.exponentialRampToValueAtTime(voice.amount, start + 0.12);
+    voice.gain.gain.exponentialRampToValueAtTime(voice.amount * 0.28, start + 1.7);
+  });
+  nextChord = start + 2.2;
 
   const seconds = 1;
   const buffer = audio.createBuffer(1, audio.sampleRate * seconds, audio.sampleRate);
@@ -190,14 +196,16 @@ function stepChord(light) {
   const leaving = layers[active];
   arriving.forEach((voice, index) => {
     voice.osc.frequency.setValueAtTime(CHORDS[chordIndex][index], now);
-    const level = index === 2 ? voice.amount * light : voice.amount;
-    voice.gain.gain.setTargetAtTime(Math.max(0.0001, level), now, 0.9);
+    const level = Math.max(0.0001, index === 2 ? voice.amount * light : voice.amount);
+    voice.gain.gain.setValueAtTime(0.0001, now);
+    voice.gain.gain.exponentialRampToValueAtTime(level, now + 0.12);
+    voice.gain.gain.exponentialRampToValueAtTime(level * 0.28, now + 1.7);
   });
   leaving.forEach((voice) => {
-    voice.gain.gain.setTargetAtTime(0.0001, now, 0.9);
+    voice.gain.gain.setTargetAtTime(0.0001, now, 0.15);
   });
   active = idle;
-  nextChord = now + 10 + Math.random() * 6;
+  nextChord = now + 2.4 + Math.random() * 1.3;
 }
 
 export function follow(mode, light) {
@@ -218,12 +226,12 @@ export function follow(mode, light) {
     }
   }
   if (muted || mode === "over" || mode === "paused" || now < nextBell) return;
-  nextBell = now + (mode === "play" ? 7 : 11) + Math.random() * 7;
-  if (Math.random() < 0.42) return;
+  nextBell = now + (mode === "play" ? 1.15 : 2.1) + Math.random() * 1.15;
+  if (Math.random() < 0.12) return;
   const scale = MELODY[chordIndex];
   let note = scale[Math.floor(Math.random() * scale.length)];
   if (amount < 0.45) note *= 0.5;
-  tone(note, 1.8, 0.022, "sine", music);
+  tone(note, 0.62, 0.04, "sine", music);
 }
 
 export function playBegin() {
