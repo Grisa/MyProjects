@@ -12,6 +12,9 @@ import {
   BLOOM_SPAN,
   bloomEase,
   bloomSpan,
+  edgeCamp,
+  edgeSlots,
+  pairXs,
   difficultyAt,
   passScore,
   edgeFacing,
@@ -146,6 +149,32 @@ test("the field opens over three seconds and then stays wider", () => {
   assert.ok(bloomEase(1.5) > 1.5 / 3);
   assert.equal(bloomSpan(3), BLOOM_SPAN);
   assert.equal(bloomSpan(8), BLOOM_SPAN);
+});
+
+test("a pair stays apart and inside the field", () => {
+  const centered = pairXs(600, 40, 200, () => 0.5);
+  assert.equal(centered[0], 200);
+  assert.equal(centered[1], 400);
+  const left = pairXs(600, 40, 200, () => 0);
+  assert.equal(left[0], 40);
+  assert.equal(left[1], 240);
+  const tight = pairXs(200, 40, 300, () => 0.5);
+  assert.ok(tight[1] - tight[0] >= 120 - 1e-9);
+  assert.ok(tight[0] >= 40 && tight[1] <= 160);
+});
+
+test("camping a corner pulls the next enemy onto that side", () => {
+  assert.equal(edgeCamp(20, 600, 108), -1);
+  assert.equal(edgeCamp(300, 600, 108), 0);
+  assert.equal(edgeCamp(580, 600, 108), 1);
+
+  const left = edgeSlots(12, 600, 30, 180, -1);
+  assert.ok(left[0] < 40);
+  assert.ok(left[1] > left[0] + 100);
+
+  const right = edgeSlots(590, 600, 30, 180, 1);
+  assert.ok(right[0] > 560);
+  assert.ok(right[1] < right[0] - 100);
 });
 
 test("difficulty scales speed with the view height", () => {

@@ -1,6 +1,6 @@
 # Lumina
 
-Endless runner vertical. Uma bolinha de luz fica na base da tela e só anda para os lados. A luz é o campo de visão: no escuro as sombras só mostram uma borda colorida, e o brilho acende a face virada para a bolinha. Cada uma que passa soma um ponto. Passar rente da bolinha, ainda dentro da luz, soma dois. Cada colisão apaga um pedaço da luz. Quando a luz acaba, a partida termina. Aos 400 pontos a luz explode, os inimigos param de nascer por 3 segundos e a visão abre. A partida continua nesse campo maior.
+Endless runner vertical. Uma bolinha de luz fica na base da tela e só anda para os lados. A luz é o campo de visão: no escuro as sombras só mostram uma borda colorida, e o brilho acende a face virada para a bolinha. Cada uma que passa soma um ponto. Passar rente da bolinha, ainda dentro da luz, soma dois. Cada colisão apaga um pedaço da luz. Quando a luz acaba, a partida termina. Aos 400 pontos a luz explode, os inimigos param de nascer por 3 segundos e a visão abre. A partida continua nesse campo maior, e a partir daí os inimigos caem em dupla, com um vão entre os dois. Ficar parado na borda não protege: o próximo inimigo nasce em cima de quem está no canto.
 
 Na primeira vez, o menu diz que a luz também é a vida. Sair do app, minimizar ou chegar uma notificação por cima pausa a partida até o próximo toque. O som para junto e só volta com o jogo na tela.
 

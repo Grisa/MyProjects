@@ -200,6 +200,42 @@ export function bloomSpan(elapsed, seconds = BLOOM_SECONDS, span = BLOOM_SPAN) {
   return 1 + (span - 1) * bloomEase(elapsed, seconds);
 }
 
+/**
+ * Two horizontal slots in the same wave, held apart by `separation`.
+ * The pair slides along the field so the gap is not always in the middle.
+ */
+export function pairXs(width, margin, separation, random = Math.random) {
+  const lo = margin;
+  const hi = Math.max(margin, width - margin);
+  const room = Math.max(0, hi - lo);
+  const gap = Math.min(Math.max(0, separation), room);
+  const midLo = lo + gap / 2;
+  const midHi = hi - gap / 2;
+  const mid = midLo + random() * Math.max(0, midHi - midLo);
+  return [mid - gap / 2, mid + gap / 2];
+}
+
+/** -1 on the left edge, 1 on the right, 0 when the player is out of the corner. */
+export function edgeCamp(x, width, band) {
+  if (!(width > 0) || !(band > 0)) return 0;
+  if (x <= band) return -1;
+  if (x >= width - band) return 1;
+  return 0;
+}
+
+/**
+ * A camper gets one enemy on top of them. The partner sits `gap` toward
+ * the open field, so the way out is inward.
+ */
+export function edgeSlots(x, width, radius, gap, side) {
+  const lo = Math.max(0, radius) * 0.45;
+  const hi = Math.max(lo, width - lo);
+  const aimed = clamp(x, lo, hi);
+  if (!side) return [aimed];
+  const inward = clamp(aimed - side * gap, Math.max(0, radius), Math.max(radius, width - radius));
+  return [aimed, inward];
+}
+
 export function difficultyAt(elapsedSeconds, viewHeight, config = DIFFICULTY) {
   const elapsed = Math.max(0, elapsedSeconds);
   const height = Math.max(1, viewHeight);

@@ -6,6 +6,9 @@ import {
   BLOOM_SECONDS,
   bloomEase,
   bloomSpan,
+  edgeCamp,
+  edgeSlots,
+  pairXs,
   difficultyAt,
   edgeFacing,
   enemyHitsPlayerSweep,
@@ -356,32 +359,78 @@ function pickKind() {
   return KINDS[0];
 }
 
-function spawnEnemy() {
+function rollEnemy() {
   const picked = pickKind();
   const r = clamp(
     state.viewH * (0.038 + Math.random() * 0.022) * picked.scale,
     16,
     state.viewW * 0.18,
   );
-  const margin = r + 6;
-  const span = Math.max(1, fieldW() - margin * 2);
-  let x = margin + Math.random() * span;
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    const crowded = state.enemies.some(
-      (other) => other.y < r * 3 && Math.abs(other.x - x) < r + other.r,
-    );
-    if (!crowded) break;
-    x = margin + Math.random() * span;
-  }
+  return { kind: picked.kind, tint: picked.tint, r };
+}
+
+function placeEnemy(body, x, y) {
   state.enemies.push({
-    kind: picked.kind,
-    tint: picked.tint,
+    kind: body.kind,
+    tint: body.tint,
     x,
-    y: -r - 6,
-    r,
+    y,
+    r: body.r,
     homeX: x,
     phase: Math.random() * Math.PI * 2,
   });
+}
+
+function topCrowded(x, reach) {
+  return state.enemies.some(
+    (other) => other.y < reach * 3 && Math.abs(other.x - x) < other.r + reach,
+  );
+}
+
+function campSide() {
+  const player = state.player;
+  if (!player) return 0;
+  const band = Math.max(player.coreRadius * 4, fieldW() * 0.18);
+  return edgeCamp(player.x, fieldW(), band);
+}
+
+function spawnEnemy() {
+  const body = rollEnemy();
+  const side = campSide();
+  const margin = body.r + 6;
+  const span = Math.max(1, fieldW() - margin * 2);
+  let x = side
+    ? edgeSlots(state.player.x, fieldW(), body.r, 0, side)[0]
+    : margin + Math.random() * span;
+  if (!side) {
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      if (!topCrowded(x, body.r)) break;
+      x = margin + Math.random() * span;
+    }
+  }
+  placeEnemy(body, x, -body.r - 6);
+}
+
+/** After the field opens, each wave is a pair with a gap between them. */
+function spawnPair() {
+  const a = rollEnemy();
+  const b = rollEnemy();
+  const reach = Math.max(a.r, b.r);
+  const margin = reach + 6;
+  const gap = Math.max(a.r + b.r + unit() * 0.22, fieldW() * 0.34);
+  const y = -(reach + 6);
+  const side = campSide();
+  let xs = side
+    ? edgeSlots(state.player.x, fieldW(), reach, gap, side)
+    : pairXs(fieldW(), margin, gap);
+  if (!side) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      if (!xs.some((x) => topCrowded(x, reach))) break;
+      xs = pairXs(fieldW(), margin, gap);
+    }
+  }
+  placeEnemy(a, xs[0], y);
+  placeEnemy(b, xs[1], y);
 }
 
 function spawnSpark() {
@@ -561,7 +610,8 @@ function update(dt) {
         state.spawnTimer -= dt;
         let spawned = 0;
         while (state.spawnTimer <= 0 && spawned < 3) {
-          spawnEnemy();
+          if (state.opened) spawnPair();
+          else spawnEnemy();
           state.spawnTimer += interval * perk.interval;
           spawned += 1;
         }
