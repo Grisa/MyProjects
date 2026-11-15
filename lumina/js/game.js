@@ -4,10 +4,12 @@ import {
   clamp,
   BLOOM_SCORE,
   BLOOM_SECONDS,
+  BLOOM_SPAN,
   bloomEase,
   bloomSpan,
   edgeCamp,
   edgeSlots,
+  fieldDust,
   pairXs,
   difficultyAt,
   edgeFacing,
@@ -1872,6 +1874,46 @@ function drawPlayerGlow() {
   drawGlow(player.x, player.y, player.lightRadius, state.mode === "play" ? 1 : 0.35);
 }
 
+let dustCache = null;
+
+function fieldMarks() {
+  const width = state.viewW * BLOOM_SPAN;
+  const height = state.viewH * BLOOM_SPAN;
+  if (!dustCache || dustCache.width !== width || dustCache.height !== height) {
+    dustCache = { width, height, marks: fieldDust(width, height) };
+  }
+  return dustCache.marks;
+}
+
+/** Dim specks in world space, behind the light, so the zoom has something to reveal. */
+function drawFieldDust() {
+  const { specks, motes, rings } = fieldMarks();
+  ctx.save();
+  for (const mote of motes) {
+    const gradient = ctx.createRadialGradient(mote.x, mote.y, 0, mote.x, mote.y, mote.r);
+    gradient.addColorStop(0, `rgba(168, 198, 220, ${mote.alpha})`);
+    gradient.addColorStop(1, "rgba(168, 198, 220, 0)");
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(mote.x, mote.y, mote.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  for (const ring of rings) {
+    ctx.beginPath();
+    ctx.arc(ring.x, ring.y, ring.r, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(154, 186, 210, ${ring.alpha})`;
+    ctx.lineWidth = Math.max(0.8, unit() * 0.004);
+    ctx.stroke();
+  }
+  for (const speck of specks) {
+    ctx.fillStyle = `rgba(198, 220, 236, ${speck.alpha})`;
+    ctx.beginPath();
+    ctx.arc(speck.x, speck.y, speck.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 function drawBloom() {
   if (!state.opened || state.surgeLeft <= 0 || !state.player) return;
   const t = bloomEase(BLOOM_SECONDS - state.surgeLeft);
@@ -1911,6 +1953,7 @@ function draw() {
   } else {
     ctx.save();
     ctx.scale(1 / state.span, 1 / state.span);
+    drawFieldDust();
     drawBloom();
     drawPlayerGlow();
     if (state.mode === "play" || state.mode === "paused") {

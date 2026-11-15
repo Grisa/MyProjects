@@ -14,6 +14,7 @@ import {
   bloomSpan,
   edgeCamp,
   edgeSlots,
+  fieldDust,
   pairXs,
   difficultyAt,
   passScore,
@@ -175,6 +176,26 @@ test("camping a corner pulls the next enemy onto that side", () => {
   const right = edgeSlots(590, 600, 30, 180, 1);
   assert.ok(right[0] > 560);
   assert.ok(right[1] < right[0] - 100);
+});
+
+test("field dust stays put, stays dim, and reaches past the first view", () => {
+  const wide = 170;
+  const tall = 340;
+  const first = fieldDust(wide, tall);
+  assert.deepEqual(fieldDust(wide, tall), first);
+  const marks = [...first.specks, ...first.motes, ...first.rings];
+  for (const mark of marks) {
+    assert.ok(mark.x >= 0 && mark.x <= wide);
+    assert.ok(mark.y >= 0 && mark.y <= tall);
+    assert.ok(mark.alpha >= 0.04 && mark.alpha <= 0.16);
+    assert.ok(mark.r > 0);
+  }
+  const earlyW = wide / BLOOM_SPAN;
+  const earlyH = tall / BLOOM_SPAN;
+  const visibleEarly = first.specks.filter((speck) => speck.x <= earlyW && speck.y <= earlyH);
+  const revealed = first.specks.filter((speck) => speck.x > earlyW || speck.y > earlyH);
+  assert.ok(visibleEarly.length >= 8);
+  assert.ok(revealed.length >= 8);
 });
 
 test("difficulty scales speed with the view height", () => {

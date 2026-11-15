@@ -215,6 +215,64 @@ export function pairXs(width, margin, separation, random = Math.random) {
   return [mid - gap / 2, mid + gap / 2];
 }
 
+function dustRandom(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Sparse dust fixed on the opened field. `width` and `height` are the
+ * wide field, so marks past the first view appear when the camera pulls back.
+ * The same size always returns the same layout. Alphas stay dim.
+ */
+export function fieldDust(width, height, seed = 0x5eed) {
+  const random = dustRandom(seed);
+  const w = Math.max(1, width);
+  const h = Math.max(1, height);
+  const short = Math.min(w, h);
+  const specks = [];
+  const cols = 7;
+  const rows = 8;
+  const cellW = w / cols;
+  const cellH = h / rows;
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      const jx = (random() - 0.5) * cellW * 0.72;
+      const jy = (random() - 0.5) * cellH * 0.72;
+      specks.push({
+        x: clamp(cellW * (col + 0.5) + jx, 0, w),
+        y: clamp(cellH * (row + 0.5) + jy, 0, h),
+        r: short * (0.0032 + random() * 0.0048),
+        alpha: 0.06 + random() * 0.1,
+      });
+    }
+  }
+  const motes = [];
+  for (let i = 0; i < 10; i += 1) {
+    motes.push({
+      x: random() * w,
+      y: random() * h,
+      r: short * (0.018 + random() * 0.034),
+      alpha: 0.05 + random() * 0.07,
+    });
+  }
+  const rings = [];
+  for (let i = 0; i < 6; i += 1) {
+    rings.push({
+      x: w * (0.12 + random() * 0.76),
+      y: h * (0.1 + random() * 0.8),
+      r: short * (0.05 + random() * 0.075),
+      alpha: 0.05 + random() * 0.08,
+    });
+  }
+  return { specks, motes, rings };
+}
+
 /** -1 on the left edge, 1 on the right, 0 when the player is out of the corner. */
 export function edgeCamp(x, width, band) {
   if (!(width > 0) || !(band > 0)) return 0;
