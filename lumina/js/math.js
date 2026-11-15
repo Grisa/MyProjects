@@ -224,6 +224,51 @@ export function pairXs(width, margin, separation, random = Math.random) {
   return [mid - gap / 2, mid + gap / 2];
 }
 
+/** Gap between a pair. Wide enough to slip through, and not the same every wave. */
+export function variedGap(minGap, maxGap, random = Math.random) {
+  const lo = Math.max(0, minGap);
+  const hi = Math.max(lo, maxGap);
+  return lo + random() * (hi - lo);
+}
+
+/** How far the second enemy of a wave starts above the first. Sometimes they share a line. */
+export function staggerDrop(reach, random = Math.random) {
+  if (!(reach > 0) || random() < 0.2) return 0;
+  return reach * (1.5 + random() * 2.8);
+}
+
+/** Multiplier for the wait before the next wave. */
+export function spawnJitter(random = Math.random) {
+  return 0.68 + random() * 0.74;
+}
+
+/** Sideways offset that still covers a player who stays put. */
+export function laneNudge(radius, random = Math.random) {
+  const sign = random() < 0.5 ? -1 : 1;
+  return sign * Math.max(0, radius) * (0.2 + random() * 0.7);
+}
+
+/**
+ * One slot sits just off the player. The other stays `gap` away,
+ * so the open side is the way through.
+ */
+export function aimPair(playerX, width, radius, gap, random = Math.random) {
+  const margin = Math.max(0, radius);
+  const lo = margin;
+  const hi = Math.max(lo, width - margin);
+  const span = Math.min(Math.max(0, gap), Math.max(0, hi - lo));
+  let sign = random() < 0.5 ? -1 : 1;
+  const nudge = sign * Math.max(0, radius) * (0.2 + random() * 0.7);
+  const aimed = clamp(playerX + nudge, lo, hi);
+  let other = clamp(aimed + sign * span, lo, hi);
+  if (span > 0 && Math.abs(other - aimed) < span * 0.85) {
+    sign = -sign;
+    other = clamp(aimed + sign * span, lo, hi);
+  }
+  if (span > 0 && Math.abs(other - aimed) < span * 0.85) return [lo, hi];
+  return aimed <= other ? [aimed, other] : [other, aimed];
+}
+
 function dustRandom(seed) {
   let state = seed >>> 0;
   return () => {

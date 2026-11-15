@@ -7,10 +7,15 @@ import {
   BLOOM_SPAN,
   bloomEase,
   bloomSpan,
+  aimPair,
   edgeCamp,
   edgeSlots,
   fieldDust,
+  laneNudge,
   pairXs,
+  spawnJitter,
+  staggerDrop,
+  variedGap,
   difficultyAt,
   edgeFacing,
   enemyHitsPlayerSweep,
@@ -453,6 +458,7 @@ function placeEnemy(body, x, y) {
     r: body.r,
     homeX: x,
     phase: Math.random() * Math.PI * 2,
+    fall: 0.74 + Math.random() * 0.52,
   });
 }
 
@@ -474,10 +480,13 @@ function spawnEnemy() {
   const side = campSide();
   const margin = body.r + 6;
   const span = Math.max(1, fieldW() - margin * 2);
+  const aimed = !side && Math.random() < 0.58;
   let x = side
     ? edgeSlots(state.player.x, fieldW(), body.r, 0, side)[0]
-    : margin + Math.random() * span;
-  if (!side) {
+    : aimed
+      ? clamp(state.player.x + laneNudge(body.r), margin, Math.max(margin, fieldW() - margin))
+      : margin + Math.random() * span;
+  if (!side && !aimed) {
     for (let attempt = 0; attempt < 6; attempt += 1) {
       if (!topCrowded(x, body.r)) break;
       x = margin + Math.random() * span;
@@ -486,26 +495,32 @@ function spawnEnemy() {
   placeEnemy(body, x, -body.r - 6);
 }
 
-/** After the field opens, each wave is a pair with a gap between them. */
+/** A pair with a changing gap. One often sits on the player's lane, and the other arrives later. */
 function spawnPair() {
   const a = rollEnemy();
   const b = rollEnemy();
   const reach = Math.max(a.r, b.r);
   const margin = reach + 6;
-  const gap = Math.max(a.r + b.r + unit() * 0.22, fieldW() * 0.34);
-  const y = -(reach + 6);
+  const minGap = a.r + b.r + unit() * 0.1;
+  const maxGap = Math.max(minGap, fieldW() * (state.opened ? 0.5 : 0.34));
+  const gap = variedGap(minGap, maxGap);
+  const lead = -(reach + 6);
   const side = campSide();
+  const aimed = !side && Math.random() < (state.opened ? 0.72 : 0.5);
   let xs = side
     ? edgeSlots(state.player.x, fieldW(), reach, gap, side)
-    : pairXs(fieldW(), margin, gap);
-  if (!side) {
+    : aimed
+      ? aimPair(state.player.x, fieldW(), reach, gap)
+      : pairXs(fieldW(), margin, gap);
+  if (!side && !aimed) {
     for (let attempt = 0; attempt < 5; attempt += 1) {
       if (!xs.some((x) => topCrowded(x, reach))) break;
       xs = pairXs(fieldW(), margin, gap);
     }
   }
-  placeEnemy(a, xs[0], y);
-  placeEnemy(b, xs[1], y);
+  const drop = staggerDrop(reach);
+  placeEnemy(a, xs[0], lead);
+  placeEnemy(b, xs[1], lead - drop);
 }
 
 function spawnSpark() {
@@ -686,9 +701,10 @@ function update(dt) {
         state.spawnTimer -= dt;
         let spawned = 0;
         while (state.spawnTimer <= 0 && spawned < 3) {
-          if (state.opened) spawnPair();
+          const pair = state.opened || (state.elapsed > 8 && Math.random() < 0.36);
+          if (pair) spawnPair();
           else spawnEnemy();
-          state.spawnTimer += interval * perk.interval;
+          state.spawnTimer += interval * perk.interval * spawnJitter();
           spawned += 1;
         }
       }
@@ -720,7 +736,7 @@ function update(dt) {
             fieldW() - enemy.r,
           );
         }
-        enemy.y += speed * perk.speed * dt;
+        enemy.y += speed * perk.speed * (enemy.fall || 1) * dt;
         if (!state.dying && enemyHitsPlayerSweep(hitProbe, enemy, previousY)) {
           const struck = state.enemies.splice(i, 1)[0];
           hurt(struck);

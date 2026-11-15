@@ -12,10 +12,15 @@ import {
   BLOOM_SPAN,
   bloomEase,
   bloomSpan,
+  aimPair,
   edgeCamp,
   edgeSlots,
   fieldDust,
+  laneNudge,
   pairXs,
+  spawnJitter,
+  staggerDrop,
+  variedGap,
   difficultyAt,
   passScore,
   edgeFacing,
@@ -162,6 +167,28 @@ test("a pair stays apart and inside the field", () => {
   const tight = pairXs(200, 40, 300, () => 0.5);
   assert.ok(tight[1] - tight[0] >= 120 - 1e-9);
   assert.ok(tight[0] >= 40 && tight[1] <= 160);
+});
+
+test("waves vary their gap, height, timing, and lane", () => {
+  assert.equal(variedGap(40, 200, () => 0), 40);
+  assert.equal(variedGap(40, 200, () => 1), 200);
+  assert.equal(staggerDrop(20, () => 0.1), 0);
+  let step = 0;
+  const staggerRolls = [0.5, 0];
+  assert.equal(staggerDrop(20, () => staggerRolls[step++]), 30);
+  assert.equal(spawnJitter(() => 0), 0.68);
+  assert.equal(spawnJitter(() => 1), 1.42);
+
+  const nudge = laneNudge(30, () => 0);
+  assert.equal(nudge, -6);
+
+  let i = 0;
+  const rolls = [0.8, 0];
+  const pair = aimPair(300, 600, 30, 180, () => rolls[i++]);
+  assert.equal(pair[0], 306);
+  assert.equal(pair[1], 486);
+  assert.ok(Math.abs(pair[0] - 300) < 30);
+  assert.ok(pair[1] - pair[0] >= 180 * 0.85);
 });
 
 test("camping a corner pulls the next enemy onto that side", () => {
