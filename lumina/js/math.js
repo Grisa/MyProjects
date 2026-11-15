@@ -81,6 +81,28 @@ export function diamondPoints(x, y, r) {
   ];
 }
 
+/**
+ * How directly a light hits one edge of a shape. 1 is face-on, 0 is grazing,
+ * negative means the edge points away from the light.
+ */
+export function edgeFacing(ax, ay, bx, by, cx, cy, lightX, lightY) {
+  const mx = (ax + bx) / 2;
+  const my = (ay + by) / 2;
+  let nx = ay - by;
+  let ny = bx - ax;
+  const length = Math.hypot(nx, ny) || 1;
+  nx /= length;
+  ny /= length;
+  if ((mx - cx) * nx + (my - cy) * ny < 0) {
+    nx = -nx;
+    ny = -ny;
+  }
+  const lx = lightX - mx;
+  const ly = lightY - my;
+  const reach = Math.hypot(lx, ly) || 1;
+  return (lx / reach) * nx + (ly / reach) * ny;
+}
+
 export function enemyHitsPlayer(player, enemy) {
   if (enemy.kind === "diamond") {
     return circleHitsPolygon(

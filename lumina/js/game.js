@@ -3,6 +3,7 @@ import {
   clamp,
   diamondPoints,
   difficultyAt,
+  edgeFacing,
   enemyHitsPlayerSweep,
   lerp,
 } from "./math.js";
@@ -12,6 +13,10 @@ const PORTRAIT = 9 / 16;
 const PLAYER_Y = 0.82;
 const CORE_FRAC = 0.028;
 const LIGHT_FRAC = 0.22;
+const TINTS = {
+  rose: [255, 72, 112],
+  violet: [188, 112, 255],
+};
 const FOLLOW = 14;
 const LIGHT_LERP = 4.2;
 const SHAKE_DECAY = 2.1;
@@ -202,6 +207,7 @@ function spawnEnemy() {
   }
   state.enemies.push({
     kind: diamond ? "diamond" : "orb",
+    tint: diamond ? "violet" : "rose",
     x,
     y: -r - 6,
     r,
@@ -439,36 +445,101 @@ function traceEnemy(enemy) {
   ctx.arc(enemy.x, enemy.y, enemy.r, 0, Math.PI * 2);
 }
 
-/** How much of a shadow the light reveals. Outside the glow they stay almost hidden. */
-function visionOf(enemy) {
+/** 0 outside the glow, 1 when the light reaches the body. */
+function beamOn(enemy) {
   const player = state.player;
   const distance = Math.hypot(enemy.x - player.x, enemy.y - player.y);
-  const nearest = Math.max(0, distance - enemy.r * 0.3);
+  const gap = Math.max(0, distance - enemy.r * 0.82);
   const reach = Math.max(player.lightRadius, 1);
-  const linear = clamp(1 - nearest / reach, 0, 1);
-  const eased = linear * linear * (3 - 2 * linear);
-  return 0.05 + eased * 0.95;
+  const linear = clamp(1 - gap / reach, 0, 1);
+  return linear ** 0.45;
 }
 
-/** A shadow darker than the background. The player's light, drawn behind it, is what reveals the shape. */
-function drawEnemy(enemy) {
-  const seen = visionOf(enemy);
-  ctx.save();
-  ctx.globalAlpha = seen;
-  const gradient = ctx.createRadialGradient(
-    enemy.x,
-    enemy.y,
-    enemy.r * 0.2,
+function rgba(color, alpha) {
+  return `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${alpha})`;
+}
+
+function drawLitDiamond(enemy, color, beam) {
+  const player = state.player;
+  const points = diamondPoints(enemy.x, enemy.y, enemy.r);
+  for (let i = 0; i < points.length; i += 1) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
+    const facing = edgeFacing(a.x, a.y, b.x, b.y, enemy.x, enemy.y, player.x, player.y);
+    if (facing <= 0.04) continue;
+    const amount = Math.min(1, facing * (0.35 + beam * 0.9));
+    const midX = (a.x + b.x) / 2;
+    const midY = (a.y + b.y) / 2;
+    const face = ctx.createLinearGradient(midX, midY, enemy.x, enemy.y);
+    face.addColorStop(0, `rgba(244, 254, 255, ${0.95 * amount})`);
+    face.addColorStop(0.38, rgba(color, 0.72 * amount));
+    face.addColorStop(1, rgba(color, 0));
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.lineTo(enemy.x, enemy.y);
+    ctx.closePath();
+    ctx.fillStyle = face;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.strokeStyle = `rgba(244, 254, 255, ${0.95 * amount})`;
+    ctx.lineWidth = Math.max(2.5, enemy.r * 0.11);
+    ctx.stroke();
+  }
+}
+
+function drawLitOrb(enemy, color, beam) {
+  const player = state.player;
+  const dx = player.x - enemy.x;
+  const dy = player.y - enemy.y;
+  const distance = Math.hypot(dx, dy) || 1;
+  const nx = dx / distance;
+  const ny = dy / distance;
+  const highlight = ctx.createRadialGradient(
+    enemy.x + nx * enemy.r * 0.42,
+    enemy.y + ny * enemy.r * 0.42,
+    enemy.r * 0.04,
     enemy.x,
     enemy.y,
     enemy.r,
   );
-  gradient.addColorStop(0, "#010206");
-  gradient.addColorStop(0.72, "#02030a");
-  gradient.addColorStop(1, "rgba(2, 3, 10, 0)");
-  ctx.fillStyle = gradient;
+  highlight.addColorStop(0, `rgba(244, 254, 255, ${0.95 * beam})`);
+  highlight.addColorStop(0.34, rgba(color, 0.78 * beam));
+  highlight.addColorStop(1, rgba(color, 0));
+  ctx.fillStyle = highlight;
   traceEnemy(enemy);
   ctx.fill();
+
+  const face = Math.atan2(ny, nx);
+  ctx.beginPath();
+  ctx.arc(enemy.x, enemy.y, enemy.r * 0.9, face - 1.05, face + 1.05);
+  ctx.strokeStyle = `rgba(244, 254, 255, ${0.98 * beam})`;
+  ctx.lineWidth = Math.max(3, enemy.r * 0.18);
+  ctx.stroke();
+}
+
+/** Dark body, a faint colored rim in the dark, and faces that catch the player's light. */
+function drawEnemy(enemy) {
+  const color = TINTS[enemy.tint] ?? TINTS.rose;
+  const beam = beamOn(enemy);
+  ctx.save();
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  traceEnemy(enemy);
+  ctx.fillStyle = "#05070f";
+  ctx.fill();
+  ctx.lineWidth = Math.max(1.75, enemy.r * 0.075);
+  ctx.strokeStyle = rgba(color, 0.58);
+  ctx.shadowColor = rgba(color, 0.55);
+  ctx.shadowBlur = 7;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  if (beam > 0.03) {
+    if (enemy.kind === "diamond") drawLitDiamond(enemy, color, beam);
+    else drawLitOrb(enemy, color, beam);
+  }
   ctx.restore();
 }
 

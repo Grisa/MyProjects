@@ -1,6 +1,6 @@
 # Lumina
 
-Endless runner vertical. Uma bolinha de luz fica na base da tela e só anda para os lados. A luz é o campo de visão: as sombras que caem ficam quase invisíveis no escuro e aparecem quando entram no brilho. Cada uma que passa soma um ponto. Cada colisão apaga um pedaço da luz. Quando a luz acaba, a partida termina.
+Endless runner vertical. Uma bolinha de luz fica na base da tela e só anda para os lados. A luz é o campo de visão: no escuro as sombras só mostram uma borda colorida, e o brilho acende a face virada para a bolinha. Cada uma que passa soma um ponto. Cada colisão apaga um pedaço da luz. Quando a luz acaba, a partida termina.
 
 O recorde fica neste aparelho, na chave `lumina-high-score` do `localStorage`. O jogo não envia dados para lugar nenhum.
 

@@ -8,6 +8,7 @@ import {
   clamp,
   diamondPoints,
   difficultyAt,
+  edgeFacing,
   distPointToSegmentSq,
   enemyHitsPlayer,
   enemyHitsPlayerSweep,
@@ -52,6 +53,14 @@ test("circle hits a diamond on the center, on an edge, and misses clear of it", 
   assert.equal(circleHitsPolygon(100, 200, 8, points), true);
   assert.equal(circleHitsPolygon(100, 168, 4, points), true);
   assert.equal(circleHitsPolygon(100, 120, 6, points), false);
+});
+
+test("light catches the diamond face turned toward it", () => {
+  const points = diamondPoints(0, 0, 40);
+  const bottom = edgeFacing(points[1].x, points[1].y, points[2].x, points[2].y, 0, 0, 0, 200);
+  const top = edgeFacing(points[0].x, points[0].y, points[1].x, points[1].y, 0, 0, 0, 200);
+  assert.ok(bottom > 0.4);
+  assert.ok(top < 0);
 });
 
 test("enemy hit test uses the core, not the glow", () => {
