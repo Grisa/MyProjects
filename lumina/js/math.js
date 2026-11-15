@@ -152,11 +152,20 @@ export function enemyHitsPlayer(player, enemy) {
  */
 export function enemyHitsPlayerSweep(player, enemy, previousY) {
   if (enemyHitsPlayer(player, enemy)) return true;
-  if (previousY !== enemy.y && enemyHitsPlayer(player, { ...enemy, y: previousY })) return true;
-  const low = Math.min(previousY, enemy.y);
-  const high = Math.max(previousY, enemy.y);
+  const y = enemy.y;
+  if (previousY !== y) {
+    enemy.y = previousY;
+    const hitAbove = enemyHitsPlayer(player, enemy);
+    enemy.y = y;
+    if (hitAbove) return true;
+  }
+  const low = Math.min(previousY, y);
+  const high = Math.max(previousY, y);
   if (player.y < low || player.y > high) return false;
-  return enemyHitsPlayer(player, { ...enemy, y: player.y });
+  enemy.y = player.y;
+  const hitCross = enemyHitsPlayer(player, enemy);
+  enemy.y = y;
+  return hitCross;
 }
 
 /**

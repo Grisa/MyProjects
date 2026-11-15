@@ -88,6 +88,7 @@ const canvas = document.querySelector("#game");
 const statusEl = document.querySelector("#status");
 const satProbe = document.querySelector("#sat");
 const ctx = canvas.getContext("2d");
+const hitProbe = { x: 0, y: 0, coreRadius: 0, lightRadius: 0 };
 
 const state = {
   mode: "menu",
@@ -306,7 +307,7 @@ function layout() {
   const { width, height } = viewportSize();
   const prevW = state.viewW;
   const prevH = state.viewH;
-  state.dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  state.dpr = Math.min(window.devicePixelRatio || 1, 2);
   state.width = width;
   state.height = height;
   state.safeTop = satProbe ? satProbe.offsetHeight : 0;
@@ -703,6 +704,10 @@ function update(dt) {
         );
       }
 
+      hitProbe.x = player.x;
+      hitProbe.y = player.y;
+      hitProbe.coreRadius = shownCoreRadius(player);
+      hitProbe.lightRadius = player.lightRadius;
       for (let i = state.enemies.length - 1; i >= 0; i -= 1) {
         const enemy = state.enemies[i];
         const previousY = enemy.y;
@@ -716,8 +721,7 @@ function update(dt) {
           );
         }
         enemy.y += speed * perk.speed * dt;
-        const body = { ...player, coreRadius: shownCoreRadius(player) };
-        if (!state.dying && enemyHitsPlayerSweep(body, enemy, previousY)) {
+        if (!state.dying && enemyHitsPlayerSweep(hitProbe, enemy, previousY)) {
           const struck = state.enemies.splice(i, 1)[0];
           hurt(struck);
           continue;
@@ -727,15 +731,7 @@ function update(dt) {
           && previousY < player.y
           && enemy.y >= player.y
         ) {
-          enemy.points = passScore(
-            {
-              x: player.x,
-              y: player.y,
-              coreRadius: shownCoreRadius(player),
-              lightRadius: player.lightRadius,
-            },
-            enemy,
-          );
+          enemy.points = passScore(hitProbe, enemy);
           if (enemy.points > 1) {
             popup(enemy.x, player.y - unit() * 0.05, "+2");
             playGraze();
@@ -1018,9 +1014,27 @@ function setLetterSpacing(px) {
 }
 
 function drawBackground() {
-  ctx.fillStyle = "#04060c";
-  ctx.fillRect(0, 0, state.width, state.height);
-  const gradient = ctx.createRadialGradient(
+  const layer = backgroundLayer();
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(layer, 0, 0);
+  ctx.restore();
+}
+
+let backgroundLayerCanvas = null;
+let backgroundKey = "";
+
+function backgroundLayer() {
+  const key = `${state.width}x${state.height}x${state.viewW}x${state.viewH}x${state.offsetX}x${state.offsetY}x${state.dpr}`;
+  if (backgroundLayerCanvas && backgroundKey === key) return backgroundLayerCanvas;
+  const layer = document.createElement("canvas");
+  layer.width = Math.max(1, Math.ceil(state.width * state.dpr));
+  layer.height = Math.max(1, Math.ceil(state.height * state.dpr));
+  const g = layer.getContext("2d");
+  g.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+  g.fillStyle = "#04060c";
+  g.fillRect(0, 0, state.width, state.height);
+  const gradient = g.createRadialGradient(
     state.offsetX + state.viewW / 2,
     state.offsetY + state.viewH * 0.35,
     state.viewH * 0.02,
@@ -1030,22 +1044,44 @@ function drawBackground() {
   );
   gradient.addColorStop(0, "#0c1222");
   gradient.addColorStop(1, "#04060c");
-  ctx.fillStyle = gradient;
-  ctx.fillRect(state.offsetX, state.offsetY, state.viewW, state.viewH);
+  g.fillStyle = gradient;
+  g.fillRect(state.offsetX, state.offsetY, state.viewW, state.viewH);
+  backgroundLayerCanvas = layer;
+  backgroundKey = key;
+  return layer;
+}
+
+let glowSprite = null;
+
+function glowSpriteCanvas() {
+  if (glowSprite) return glowSprite;
+  const size = 256;
+  const sprite = document.createElement("canvas");
+  sprite.width = size;
+  sprite.height = size;
+  const g = sprite.getContext("2d");
+  const mid = size / 2;
+  const gradient = g.createRadialGradient(mid, mid, size * 0.02, mid, mid, mid);
+  gradient.addColorStop(0, "rgba(244, 254, 255, 0.92)");
+  gradient.addColorStop(0.22, "rgba(126, 249, 255, 0.62)");
+  gradient.addColorStop(0.55, "rgba(70, 190, 255, 0.28)");
+  gradient.addColorStop(0.82, "rgba(50, 140, 210, 0.08)");
+  gradient.addColorStop(1, "rgba(40, 110, 180, 0)");
+  g.fillStyle = gradient;
+  g.beginPath();
+  g.arc(mid, mid, mid, 0, Math.PI * 2);
+  g.fill();
+  glowSprite = sprite;
+  return sprite;
 }
 
 function drawGlow(x, y, radius, alpha) {
-  if (radius <= 0.5) return;
-  const gradient = ctx.createRadialGradient(x, y, radius * 0.04, x, y, radius);
-  gradient.addColorStop(0, `rgba(244, 254, 255, ${0.92 * alpha})`);
-  gradient.addColorStop(0.22, `rgba(126, 249, 255, ${0.62 * alpha})`);
-  gradient.addColorStop(0.55, `rgba(70, 190, 255, ${0.28 * alpha})`);
-  gradient.addColorStop(0.82, `rgba(50, 140, 210, ${0.08 * alpha})`);
-  gradient.addColorStop(1, "rgba(40, 110, 180, 0)");
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  ctx.arc(x, y, radius, 0, Math.PI * 2);
-  ctx.fill();
+  if (radius <= 0.5 || alpha <= 0) return;
+  const sprite = glowSpriteCanvas();
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(sprite, x - radius, y - radius, radius * 2, radius * 2);
+  ctx.restore();
 }
 
 function drawCore(x, y, radius) {
@@ -1055,16 +1091,19 @@ function drawCore(x, y, radius) {
   ctx.fill();
 }
 
-function traceEnemy(enemy) {
+function traceOutline(points, x, y, r) {
   ctx.beginPath();
-  const points = enemyOutline(enemy);
   if (!points) {
-    ctx.arc(enemy.x, enemy.y, enemy.r, 0, Math.PI * 2);
+    ctx.arc(x, y, r, 0, Math.PI * 2);
     return;
   }
   ctx.moveTo(points[0].x, points[0].y);
   for (let i = 1; i < points.length; i += 1) ctx.lineTo(points[i].x, points[i].y);
   ctx.closePath();
+}
+
+function traceEnemy(enemy) {
+  traceOutline(enemyOutline(enemy), enemy.x, enemy.y, enemy.r);
 }
 
 /** 0 outside the glow, 1 when the light reaches the body. */
@@ -1081,9 +1120,8 @@ function rgba(color, alpha) {
   return `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${alpha})`;
 }
 
-function drawLitFaces(enemy, color, beam) {
+function drawLitFaces(enemy, color, beam, points) {
   const player = state.player;
-  const points = enemyOutline(enemy);
   for (let i = 0; i < points.length; i += 1) {
     const a = points[i];
     const b = points[(i + 1) % points.length];
@@ -1131,7 +1169,7 @@ function drawLitOrb(enemy, color, beam) {
   highlight.addColorStop(0.34, rgba(color, 0.78 * beam));
   highlight.addColorStop(1, rgba(color, 0));
   ctx.fillStyle = highlight;
-  traceEnemy(enemy);
+  traceOutline(null, enemy.x, enemy.y, enemy.r);
   ctx.fill();
 
   const face = Math.atan2(ny, nx);
@@ -1157,7 +1195,7 @@ function personaEye(x, y, rx, ry, px, py, color) {
   ctx.fill();
 }
 
-function drawPersona(enemy, color, beam) {
+function drawPersona(enemy, color, beam, points) {
   const reveal = clamp((beam - 0.14) / 0.5, 0, 1);
   if (reveal <= 0) return;
   const player = state.player;
@@ -1169,7 +1207,7 @@ function drawPersona(enemy, color, beam) {
   const oy = (dy / dist) * look;
   const r = enemy.r;
   ctx.save();
-  traceEnemy(enemy);
+  traceOutline(points, enemy.x, enemy.y, enemy.r);
   ctx.clip();
   ctx.globalAlpha = reveal;
   ctx.lineCap = "round";
@@ -1212,28 +1250,33 @@ function drawPersona(enemy, color, beam) {
   ctx.restore();
 }
 
+let frameRim = 0.58;
+
 /** Dark body, a faint colored rim in the dark, and a face that appears in the light. */
 function drawEnemy(enemy) {
+  if (enemy.y + enemy.r < 0 || enemy.y - enemy.r > fieldH()) return;
   const color = TINTS[enemy.tint] ?? TINTS.rose;
   const beam = beamOn(enemy);
-  const rim = perks().rim + (enemy.kind === "lantern" ? 0.08 * Math.sin(state.time * 2.2 + (enemy.phase || 0)) : 0);
+  const rim = frameRim + (enemy.kind === "lantern" ? 0.08 * Math.sin(state.time * 2.2 + (enemy.phase || 0)) : 0);
+  const points = enemyOutline(enemy);
   ctx.save();
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
-  traceEnemy(enemy);
+  traceOutline(points, enemy.x, enemy.y, enemy.r);
   ctx.fillStyle = "#05070f";
   ctx.fill();
-  ctx.lineWidth = Math.max(1.75, enemy.r * 0.075);
-  ctx.strokeStyle = rgba(color, clamp(rim, 0, 1));
-  ctx.shadowColor = rgba(color, 0.55);
-  ctx.shadowBlur = enemy.kind === "lantern" ? 12 : 7;
+  const ink = clamp(rim, 0, 1);
+  ctx.strokeStyle = rgba(color, ink * 0.45);
+  ctx.lineWidth = Math.max(3, enemy.r * 0.16);
   ctx.stroke();
-  ctx.shadowBlur = 0;
+  ctx.strokeStyle = rgba(color, ink);
+  ctx.lineWidth = Math.max(1.75, enemy.r * 0.075);
+  ctx.stroke();
   if (beam > 0.03) {
-    if (enemyOutline(enemy)) drawLitFaces(enemy, color, beam);
+    if (points) drawLitFaces(enemy, color, beam, points);
     else drawLitOrb(enemy, color, beam);
   }
-  drawPersona(enemy, color, beam);
+  drawPersona(enemy, color, beam, points);
   ctx.restore();
 }
 
@@ -1355,19 +1398,37 @@ function drawPill(rect, label, accent) {
   ctx.fillText(label, rect.x + rect.w / 2, rect.y + rect.h / 2);
 }
 
-function drawSparkGlyph(x, y, radius) {
-  const glow = ctx.createRadialGradient(x, y, 0, x, y, radius * 3.1);
+let sparkSprite = null;
+
+function sparkSpriteCanvas() {
+  if (sparkSprite) return sparkSprite;
+  const size = 128;
+  const sprite = document.createElement("canvas");
+  sprite.width = size;
+  sprite.height = size;
+  const g = sprite.getContext("2d");
+  const mid = size / 2;
+  const radius = size * 0.16;
+  const glow = g.createRadialGradient(mid, mid, 0, mid, mid, radius * 3.1);
   glow.addColorStop(0, "rgba(255, 236, 186, 0.95)");
   glow.addColorStop(0.4, "rgba(255, 186, 72, 0.28)");
   glow.addColorStop(1, "rgba(255, 170, 40, 0)");
-  ctx.fillStyle = glow;
-  ctx.beginPath();
-  ctx.arc(x, y, radius * 3.1, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#fff4d2";
-  ctx.beginPath();
-  ctx.arc(x, y, radius, 0, Math.PI * 2);
-  ctx.fill();
+  g.fillStyle = glow;
+  g.beginPath();
+  g.arc(mid, mid, radius * 3.1, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = "#fff4d2";
+  g.beginPath();
+  g.arc(mid, mid, radius, 0, Math.PI * 2);
+  g.fill();
+  sparkSprite = sprite;
+  return sprite;
+}
+
+function drawSparkGlyph(x, y, radius) {
+  const sprite = sparkSpriteCanvas();
+  const size = radius * 3.1 * 2;
+  ctx.drawImage(sprite, x - size / 2, y - size / 2, size, size);
 }
 
 function drawSparkCount(x, y, align = "left") {
@@ -1968,44 +2029,46 @@ function drawPlayerGlow() {
   drawGlow(player.x, player.y, player.lightRadius, state.mode === "play" ? 1 : 0.35);
 }
 
-let dustCache = null;
-
-function fieldMarks() {
-  const width = state.viewW * BLOOM_SPAN;
-  const height = state.viewH * BLOOM_SPAN;
-  if (!dustCache || dustCache.width !== width || dustCache.height !== height) {
-    dustCache = { width, height, marks: fieldDust(width, height) };
-  }
-  return dustCache.marks;
-}
+let dustLayerCanvas = null;
+let dustLayerKey = "";
 
 /** Dim specks in world space, behind the light, so the zoom has something to reveal. */
 function drawFieldDust() {
-  const { specks, motes, rings } = fieldMarks();
-  ctx.save();
-  for (const mote of motes) {
-    const gradient = ctx.createRadialGradient(mote.x, mote.y, 0, mote.x, mote.y, mote.r);
-    gradient.addColorStop(0, `rgba(168, 198, 220, ${mote.alpha})`);
-    gradient.addColorStop(1, "rgba(168, 198, 220, 0)");
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-    ctx.arc(mote.x, mote.y, mote.r, 0, Math.PI * 2);
-    ctx.fill();
+  const width = state.viewW * BLOOM_SPAN;
+  const height = state.viewH * BLOOM_SPAN;
+  const key = `${Math.ceil(width)}x${Math.ceil(height)}`;
+  if (!dustLayerCanvas || dustLayerKey !== key) {
+    const layer = document.createElement("canvas");
+    layer.width = Math.max(1, Math.ceil(width));
+    layer.height = Math.max(1, Math.ceil(height));
+    const g = layer.getContext("2d");
+    const { specks, motes, rings } = fieldDust(width, height);
+    for (const mote of motes) {
+      const gradient = g.createRadialGradient(mote.x, mote.y, 0, mote.x, mote.y, mote.r);
+      gradient.addColorStop(0, `rgba(168, 198, 220, ${mote.alpha})`);
+      gradient.addColorStop(1, "rgba(168, 198, 220, 0)");
+      g.fillStyle = gradient;
+      g.beginPath();
+      g.arc(mote.x, mote.y, mote.r, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.lineWidth = Math.max(0.8, unit() * 0.004);
+    for (const ring of rings) {
+      g.beginPath();
+      g.arc(ring.x, ring.y, ring.r, 0, Math.PI * 2);
+      g.strokeStyle = `rgba(154, 186, 210, ${ring.alpha})`;
+      g.stroke();
+    }
+    for (const speck of specks) {
+      g.fillStyle = `rgba(198, 220, 236, ${speck.alpha})`;
+      g.beginPath();
+      g.arc(speck.x, speck.y, speck.r, 0, Math.PI * 2);
+      g.fill();
+    }
+    dustLayerCanvas = layer;
+    dustLayerKey = key;
   }
-  for (const ring of rings) {
-    ctx.beginPath();
-    ctx.arc(ring.x, ring.y, ring.r, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(154, 186, 210, ${ring.alpha})`;
-    ctx.lineWidth = Math.max(0.8, unit() * 0.004);
-    ctx.stroke();
-  }
-  for (const speck of specks) {
-    ctx.fillStyle = `rgba(198, 220, 236, ${speck.alpha})`;
-    ctx.beginPath();
-    ctx.arc(speck.x, speck.y, speck.r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.restore();
+  ctx.drawImage(dustLayerCanvas, 0, 0, width, height);
 }
 
 function drawBloom() {
@@ -2221,6 +2284,7 @@ function draw() {
   } else {
     ctx.save();
     ctx.scale(1 / state.span, 1 / state.span);
+    frameRim = perks().rim;
     drawFieldDust();
     drawBloom();
     drawPlayerGlow();
