@@ -6,6 +6,8 @@ Faíscas caem com menos frequência que os inimigos. Pegar uma devolve um pouco 
 
 No menu, o nome fica fino e quase apagado. A luz da bolinha é que acende as letras. Os inimigos também só mostram o rosto nessa luz: a bolha é sonolenta, o caco é sério, a lasca se assusta e oscila, o vigia observa e o riso sorri.
 
+O som também nasce no aparelho. Um fundo grave fica mais fino quando a luz baixa, e cada faísca, batida e fim de partida tem um efeito curto. O alto-falante no canto desliga o som. A escolha fica em `lumina-muted`.
+
 O recorde fica em `lumina-high-score`. As faíscas e as melhorias compradas ficam em `lumina-sparks` e `lumina-upgrades`. O navegador guarda isso só no aparelho e não mostra anúncio. No app da Play Store, a cada duas mortes pode abrir um anúncio em tela cheia da Google.
 
 ## Jogar no computador

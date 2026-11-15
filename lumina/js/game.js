@@ -10,6 +10,20 @@ import {
 } from "./math.js";
 import { UPGRADES, bonuses, canBuy, nodeState, upgradeById } from "./upgrades.js";
 import { initAds, noteDeath } from "./ads.js";
+import {
+  follow,
+  isMuted,
+  playBegin,
+  playBuy,
+  playDeath,
+  playGuard,
+  playHit,
+  playPass,
+  playSpark,
+  playTap,
+  toggleMuted,
+  unlock,
+} from "./audio.js";
 
 const HIGH_SCORE_KEY = "lumina-high-score";
 const SPARKS_KEY = "lumina-sparks";
@@ -259,6 +273,7 @@ function endRun() {
   state.dying = false;
   state.pointerId = null;
   announce(`Fim de jogo. Pontos ${state.score}. Recorde ${state.highScore}.`);
+  playDeath();
   noteDeath();
 }
 
@@ -324,6 +339,7 @@ function collectSpark(orb) {
   player.targetLight = Math.min(player.initialLight, player.targetLight + player.initialLight * perks().heal);
   if (player.targetLight > 0) state.dying = false;
   popup(orb.x, orb.y, `+${gained}`);
+  playSpark();
 }
 
 function burst(x, y) {
@@ -358,15 +374,19 @@ function hurt(enemy) {
   const hit = impactPoint(player, enemy);
   const perk = perks();
   let next = applyDamage(player.targetLight, player.initialLight, perk.damage);
+  let guarded = false;
   if (next === 0 && perk.guard && !state.guardUsed) {
     next = player.initialLight * 0.12;
     state.guardUsed = true;
+    guarded = true;
   }
   player.targetLight = next;
   state.calm = 0;
   state.shake = 1;
   burst(hit.x, hit.y);
   if (player.targetLight === 0) state.dying = true;
+  if (guarded) playGuard();
+  else playHit(player.targetLight === 0);
 }
 
 function update(dt) {
@@ -427,6 +447,7 @@ function update(dt) {
           if (!state.dying) {
             state.score += 1;
             announce(`Pontos ${state.score}`);
+            playPass();
           }
         }
       }
@@ -463,6 +484,11 @@ function update(dt) {
     player.lightRadius = lerp(player.lightRadius, player.targetLight, LIGHT_LERP, dt);
     if (state.dying && player.lightRadius < 1.5) endRun();
   }
+
+  const light = state.mode === "play" && player?.initialLight
+    ? player.lightRadius / player.initialLight
+    : state.mode === "over" ? 0.04 : 0.85;
+  follow(state.mode, light);
 
   if (state.shake > 0) state.shake = Math.max(0, state.shake - SHAKE_DECAY * dt);
 
@@ -524,26 +550,52 @@ function capturePointer(event) {
   }
 }
 
+function muteRect() {
+  const size = Math.max(44, unit() * 0.09);
+  return {
+    x: state.viewW - size - 12,
+    y: Math.max(12, state.safeTop + 8),
+    w: size,
+    h: size,
+  };
+}
+
+function onMute() {
+  const silent = toggleMuted();
+  announce(silent ? "Som desligado." : "Som ligado.");
+}
+
 function onPointerDown(event) {
   if (event.button != null && event.button !== 0) return;
   event.preventDefault();
   const point = playfieldPoint(event.clientX, event.clientY);
+  if (state.mode !== "tree" && insideRect(point.x, point.y, muteRect())) {
+    onMute();
+    return;
+  }
+  unlock();
   if (state.mode === "menu") {
     if (insideRect(point.x, point.y, buttonRect(0.8))) {
+      playTap();
       openTree();
       return;
     }
+    playBegin();
     resetRun(point.x);
     capturePointer(event);
     return;
   }
   if (state.mode === "over") {
     if (insideRect(point.x, point.y, buttonRect(0.58))) {
+      playBegin();
       resetRun(point.x);
       capturePointer(event);
       return;
     }
-    if (insideRect(point.x, point.y, buttonRect(0.7))) openTree();
+    if (insideRect(point.x, point.y, buttonRect(0.7))) {
+      playTap();
+      openTree();
+    }
     return;
   }
   if (state.mode === "tree") {
@@ -601,6 +653,7 @@ function tryBuy(id) {
   state.sparks -= upgrade.cost;
   state.owned.add(id);
   saveProgress();
+  playBuy();
   announce(`${upgrade.name} comprado. ${state.sparks} faíscas.`);
 }
 
@@ -1307,6 +1360,7 @@ function drawMenu() {
   ctx.restore();
   drawSparkCount(x, sparkY, "center");
   drawPill(button, "Melhorias", "rgba(255, 214, 120, 0.9)");
+  drawMute();
 }
 
 function roundRect(x, y, w, h, radius) {
@@ -1353,6 +1407,46 @@ function drawGameOver() {
   ctx.font = font(Math.max(16, unit() * 0.04), 600);
   ctx.fillText("Jogar novamente", x, button.y + button.h / 2);
   drawPill(buttonRect(0.7), "Melhorias", "rgba(255, 214, 120, 0.9)");
+  drawMute();
+}
+
+function drawMute() {
+  const rect = muteRect();
+  const silent = isMuted();
+  ctx.save();
+  ctx.translate(rect.x + rect.w / 2, rect.y + rect.h / 2);
+  const s = rect.w * 0.22;
+  ctx.fillStyle = "rgba(4, 6, 12, 0.62)";
+  ctx.beginPath();
+  ctx.arc(0, 0, rect.w * 0.34, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(214, 232, 240, 0.78)";
+  ctx.lineWidth = 1.6;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.15, -s * 0.38);
+  ctx.lineTo(-s * 0.72, -s * 0.38);
+  ctx.lineTo(-s * 0.72, s * 0.38);
+  ctx.lineTo(-s * 0.15, s * 0.38);
+  ctx.lineTo(s * 0.42, s * 0.9);
+  ctx.lineTo(s * 0.42, -s * 0.9);
+  ctx.closePath();
+  ctx.stroke();
+  if (silent) {
+    ctx.beginPath();
+    ctx.moveTo(s * 0.15, -s * 0.72);
+    ctx.lineTo(s * 1.15, s * 0.72);
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.arc(s * 0.28, 0, s * 0.48, -0.75, 0.75);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(s * 0.28, 0, s * 0.9, -0.62, 0.62);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawPlayerGlow() {
@@ -1401,6 +1495,7 @@ function draw() {
     if (state.mode === "play") {
       drawScore();
       drawSparkCount(18, Math.max(18, state.safeTop + 18));
+      drawMute();
     } else drawGameOver();
   }
 
