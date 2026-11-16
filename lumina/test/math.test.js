@@ -26,12 +26,15 @@ import {
   fieldDust,
   laneNudge,
   pairXs,
+  ACT_PACE,
   CAST_SCORE,
+  ENDLESS_PACE,
+  actIndex,
+  actLine,
   castKinds,
+  paceAt,
   spawnJitter,
   staggerDrop,
-  WAVE_INTERVAL,
-  waveInterval,
   waveWait,
   variedGap,
   difficultyAt,
@@ -179,29 +182,48 @@ test("three hits extinguish the light", () => {
   assert.ok(Math.abs(afterFirst - initial * (1 - 0.38)) < 1e-9);
 });
 
-test("difficulty rises every 7 seconds and the spawn interval has a floor", () => {
-  const start = difficultyAt(0, DIFFICULTY.referenceHeight);
-  assert.equal(start.steps, 0);
-  assert.equal(start.speed, DIFFICULTY.baseSpeed);
-  assert.equal(start.interval, DIFFICULTY.baseInterval);
+test("each act climbs to its own ceiling and the next act continues it", () => {
+  assert.equal(actIndex(0), 0);
+  assert.equal(actIndex(199), 0);
+  assert.equal(actIndex(200), 1);
+  assert.equal(actIndex(399), 1);
+  assert.equal(actIndex(400), 2);
+  assert.equal(actIndex(599), 2);
+  assert.equal(actIndex(600), 3);
+  assert.equal(actIndex(900), 3);
 
-  const step = difficultyAt(7, DIFFICULTY.referenceHeight);
-  assert.equal(step.steps, 1);
-  assert.equal(DIFFICULTY.speedGrowth, 1.03);
-  assert.ok(Math.abs(step.speed - DIFFICULTY.baseSpeed * DIFFICULTY.speedGrowth) < 1e-9);
-  assert.ok(Math.abs(step.interval - DIFFICULTY.baseInterval * DIFFICULTY.intervalShrink) < 1e-9);
+  assert.equal(actLine(0), "");
+  assert.equal(actLine(1), "Ato 2. A lasca e o riso entram.");
+  assert.equal(actLine(2), "Ato 3. A luz abre o campo.");
+  assert.equal(actLine(3), "Sem fim.");
 
-  const midRun = difficultyAt(3 * 60, DIFFICULTY.referenceHeight);
-  const travel = DIFFICULTY.referenceHeight * 0.85;
-  const seconds = travel / midRun.speed;
-  assert.ok(seconds > 1.2 && seconds < 1.8);
+  const height = DIFFICULTY.referenceHeight;
+  const start = difficultyAt(0, height);
+  assert.equal(start.travel, ACT_PACE[0].travel[0]);
+  assert.equal(start.interval, ACT_PACE[0].interval[0]);
+  assert.ok(start.interval < 0.9);
+  const travelPx = height * DIFFICULTY.travelFraction;
+  assert.ok(Math.abs(travelPx / start.speed - start.travel) < 1e-9);
 
-  const justBefore = difficultyAt(6.99, DIFFICULTY.referenceHeight);
-  assert.equal(justBefore.steps, 0);
+  const lateAct = paceAt(199);
+  const actTwo = paceAt(200);
+  assert.ok(lateAct.travel < start.travel);
+  assert.ok(lateAct.interval < start.interval);
+  assert.ok(Math.abs(lateAct.travel - actTwo.travel) < 0.01);
+  assert.ok(Math.abs(lateAct.interval - actTwo.interval) < 0.01);
+  assert.ok(Math.abs(paceAt(399).travel - paceAt(400).travel) < 0.01);
+  assert.ok(Math.abs(paceAt(599).travel - ENDLESS_PACE.travel) < 0.01);
+  assert.equal(paceAt(400).interval, ACT_PACE[2].interval[0]);
+  assert.ok(paceAt(500).interval < 0.5);
 
-  const late = difficultyAt(7 * 40, DIFFICULTY.referenceHeight);
-  assert.equal(late.interval, DIFFICULTY.minInterval);
-  assert.ok(late.speed > step.speed);
+  const capped = difficultyAt(199, height);
+  const endless = difficultyAt(600, height);
+  const lifted = difficultyAt(800, height);
+  assert.ok(capped.speed < endless.speed);
+  assert.ok(Math.abs(endless.travel / lifted.travel - DIFFICULTY.endlessGrowth ** 2) < 1e-9);
+  assert.ok(Math.abs(endless.interval / lifted.interval - DIFFICULTY.endlessGrowth ** 2) < 1e-9);
+  assert.ok(lifted.speed > endless.speed);
+  assert.ok(lifted.interval < endless.interval);
 });
 
 test("a close pass inside the light scores 2, and a far pass scores 1", () => {
@@ -243,14 +265,12 @@ test("waves vary their gap, height, timing, and lane", () => {
   let step = 0;
   const staggerRolls = [0.5, 0];
   assert.equal(staggerDrop(20, () => staggerRolls[step++]), 30);
-  assert.equal(spawnJitter(() => 0), 0.85);
-  assert.equal(spawnJitter(() => 1), 1.15);
-  assert.equal(waveInterval(false), WAVE_INTERVAL.closed);
-  assert.equal(waveInterval(true), WAVE_INTERVAL.open);
-  const calm = waveWait(false, 1, 1, () => 0.5);
-  const paused = waveWait(false, 0.88, 1, () => 0.5);
-  assert.ok(Math.abs(paused * 0.88 - calm) < 1e-9);
-  assert.ok(waveWait(false, 0.88, 1.18, () => 0.5) > paused);
+  assert.equal(spawnJitter(() => 0), 0.93);
+  assert.equal(spawnJitter(() => 1), 1.07);
+  const calm = waveWait(0, 1, () => 0.5);
+  assert.ok(Math.abs(calm - paceAt(0).interval) < 1e-9);
+  assert.ok(waveWait(0, 1.18, () => 0.5) > calm);
+  assert.ok(waveWait(180, 1, () => 0.5) < calm);
   assert.deepEqual(castKinds(0, false), ["orb", "diamond"]);
   assert.deepEqual(castKinds(CAST_SCORE, false), ["orb", "diamond", "shard", "grin"]);
   assert.deepEqual(castKinds(CAST_SCORE, true), ["orb", "diamond", "shard", "grin", "lantern"]);
@@ -390,7 +410,12 @@ test("field dust stays put, stays dim, and reaches past the first view", () => {
   assert.ok(revealed.length >= 8);
 });
 
-test("difficulty scales speed with the view height", () => {
+test("difficulty scales speed with the view height and the open field", () => {
   const phone = difficultyAt(0, 422);
-  assert.ok(Math.abs(phone.speed - DIFFICULTY.baseSpeed * 0.5) < 1e-9);
+  const reference = difficultyAt(0, DIFFICULTY.referenceHeight);
+  assert.ok(Math.abs(phone.speed - reference.speed * 0.5) < 1e-9);
+  const opened = difficultyAt(400, DIFFICULTY.referenceHeight, 1.7);
+  const closed = difficultyAt(400, DIFFICULTY.referenceHeight, 1);
+  assert.ok(Math.abs(opened.speed - closed.speed * 1.7) < 1e-9);
+  assert.equal(opened.travel, closed.travel);
 });

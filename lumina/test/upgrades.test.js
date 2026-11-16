@@ -52,13 +52,13 @@ test("bonuses stack along a branch", () => {
   assert.equal(base.playerY, 0.82);
   assert.equal(base.rim, 0.58);
   assert.equal(base.guard, false);
-  assert.equal(base.speed, 1);
+  assert.equal(base.interval, 1);
   assert.equal(base.sparkScore, 0);
   assert.equal(base.magnet, 0);
 
   const grown = bonuses(new Set([
     "centelha", "halo", "aurora", "farol", "vela", "casco", "muralha", "respiro",
-    "pausa", "folga", "miolo", "ima", "brasa", "prisma",
+    "folga", "miolo", "ima", "brasa", "prisma",
   ]));
   assert.ok(Math.abs(grown.light - 1.44) < 1e-9);
   assert.equal(grown.damage, 0.28);
@@ -70,8 +70,8 @@ test("bonuses stack along a branch", () => {
   assert.equal(grown.playerY, 0.785);
   assert.equal(grown.rim, 0.92);
   assert.equal(grown.guard, true);
-  assert.equal(grown.speed, 0.88);
   assert.equal(grown.interval, 1.18);
+  assert.equal(upgradeById("pausa"), null);
 });
 
 test("tiers get stronger and more expensive", () => {

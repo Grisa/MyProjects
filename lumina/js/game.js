@@ -20,8 +20,11 @@ import {
   fieldDust,
   laneNudge,
   pairXs,
+  actBanner,
+  actIndex,
+  actLine,
   castKinds,
-  waveInterval,
+  paceAt,
   waveWait,
   staggerDrop,
   variedGap,
@@ -140,6 +143,14 @@ const KINDS = [
 const LIGHT_LERP = 4.2;
 const SHAKE_DECAY = 2.1;
 const MAX_DT = 0.05;
+const ACT_BLEND = 1.2;
+const ACT_BANNER = 2.2;
+const ACT_SKY = [
+  { glow: "#0c1222", edge: "#04060c" },
+  { glow: "#12343a", edge: "#061416" },
+  { glow: "#2a1642", edge: "#120818" },
+  { glow: "#2a1642", edge: "#120818" },
+];
 
 const canvas = document.querySelector("#game");
 const statusEl = document.querySelector("#status");
@@ -196,6 +207,11 @@ const state = {
   flash: 0,
   boss: null,
   bossVisit: 0,
+  act: 0,
+  actFrom: 0,
+  actBlend: 1,
+  actBanner: "",
+  actBannerLeft: 0,
 };
 
 function loadHintSeen() {
@@ -473,6 +489,35 @@ function announce(text) {
   statusEl.textContent = text;
 }
 
+function showRunSky() {
+  if (state.mode === "play" || state.mode === "paused" || state.mode === "over") return true;
+  if (state.mode === "settings") {
+    const back = state.settingsReturn;
+    return back === "play" || back === "paused" || back === "over";
+  }
+  return false;
+}
+
+function tickAct(dt) {
+  if (state.actBlend < 1) state.actBlend = Math.min(1, state.actBlend + dt / ACT_BLEND);
+  else state.actFrom = state.act;
+  if (state.actBannerLeft > 0) state.actBannerLeft = Math.max(0, state.actBannerLeft - dt);
+}
+
+function noteAct() {
+  const next = actIndex(state.score);
+  if (next === state.act) return false;
+  state.actFrom = state.act;
+  state.act = next;
+  state.actBlend = 0;
+  const banner = actBanner(next);
+  state.actBanner = banner;
+  state.actBannerLeft = banner ? ACT_BANNER : 0;
+  const line = actLine(next);
+  if (line) announce(line);
+  return Boolean(line);
+}
+
 function resetRun(pointerX) {
   state.span = 1;
   state.surgeLeft = 0;
@@ -480,6 +525,11 @@ function resetRun(pointerX) {
   state.flash = 0;
   state.boss = null;
   state.bossVisit = 0;
+  state.act = 0;
+  state.actFrom = 0;
+  state.actBlend = 1;
+  state.actBanner = "";
+  state.actBannerLeft = 0;
   state.player = makePlayer(Number.isFinite(pointerX) ? pointerX : state.viewW / 2);
   state.enemies = [];
   state.orbs = [];
@@ -640,7 +690,10 @@ function collectSpark(orb) {
   const perk = perks();
   const gained = perk.sparkValue;
   state.sparks += gained;
-  if (perk.sparkScore) state.score += perk.sparkScore;
+  if (perk.sparkScore) {
+    state.score += perk.sparkScore;
+    noteAct();
+  }
   maybeBloom();
   saveProgress();
   const player = state.player;
@@ -751,7 +804,6 @@ function maybeBloom() {
   state.flash = 1;
   bloomBurst();
   playBloom();
-  announce("A luz abre.");
 }
 
 function bossShape() {
@@ -853,7 +905,7 @@ function dismissBoss() {
 function finishBoss() {
   while (state.score >= bossThreshold(state.bossVisit)) state.bossVisit += 1;
   state.boss = null;
-  state.spawnTimer = waveInterval(true);
+  state.spawnTimer = paceAt(state.score).interval;
 }
 
 function maybeBoss() {
@@ -967,14 +1019,14 @@ function update(dt) {
     if (!state.dying) {
       state.elapsed += dt;
       state.calm += dt;
-      const { speed } = difficultyAt(state.elapsed, state.viewH);
-      if (state.boss) tickBoss(dt, speed * perk.speed);
+      const { speed } = difficultyAt(state.score, state.viewH, state.span);
+      if (state.boss) tickBoss(dt, speed);
       if (!state.boss && state.surgeLeft <= 0) {
         state.spawnTimer -= dt;
         if (state.spawnTimer <= 0) {
           if (state.opened) spawnPair();
           else spawnEnemy();
-          const wait = waveWait(state.opened, perk.speed, perk.interval);
+          const wait = waveWait(state.score, perk.interval);
           state.spawnTimer = Math.max(state.spawnTimer + wait, wait);
         }
       }
@@ -999,7 +1051,7 @@ function update(dt) {
       for (let i = state.enemies.length - 1; i >= 0; i -= 1) {
         const enemy = state.enemies[i];
         const previousY = enemy.y;
-        enemyStep(enemy, dt, speed * perk.speed, state.time, fieldW());
+        enemyStep(enemy, dt, speed, state.time, fieldW());
         if (!state.dying && enemyHitsPlayerSweep(hitProbe, enemy, previousY)) {
           const struck = state.enemies.splice(i, 1)[0];
           hurt(struck);
@@ -1021,7 +1073,10 @@ function update(dt) {
           if (!state.dying) {
             const gained = enemy.points ?? 1;
             state.score += gained;
-            if (!state.boss || state.boss.phase !== "arrive") announce(`Pontos ${state.score}`);
+            const crossed = noteAct();
+            if (!crossed && (!state.boss || state.boss.phase !== "arrive")) {
+              announce(`Pontos ${state.score}`);
+            }
             if (gained === 1) playPass();
             maybeBloom();
           }
@@ -1032,7 +1087,7 @@ function update(dt) {
       for (let i = state.orbs.length - 1; i >= 0; i -= 1) {
         const orb = state.orbs[i];
         const previousY = orb.y;
-        orb.y += speed * perk.speed * dt;
+        orb.y += speed * dt;
         if (!orb.core && magnet > 0) {
           const dx = player.x - orb.x;
           const dy = player.y - orb.y;
@@ -1068,6 +1123,7 @@ function update(dt) {
     : state.mode === "over" ? 0.04 : 0.85;
   follow(state.mode, light);
 
+  if (state.mode === "play" || state.mode === "over") tickAct(dt);
   if (state.shake > 0) state.shake = Math.max(0, state.shake - SHAKE_DECAY * dt);
 
   for (let i = state.particles.length - 1; i >= 0; i -= 1) {
@@ -1306,25 +1362,42 @@ function setLetterSpacing(px) {
 }
 
 function drawBackground() {
-  const layer = backgroundLayer();
+  const run = showRunSky();
+  const from = run ? state.actFrom : 0;
+  const to = run ? state.act : 0;
+  const blend = run ? state.actBlend : 1;
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.drawImage(layer, 0, 0);
+  ctx.drawImage(backgroundLayer(from), 0, 0);
+  if (blend < 1 && to !== from) {
+    ctx.globalAlpha = blend;
+    ctx.drawImage(backgroundLayer(to), 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+    drawActSweep(blend);
+  }
   ctx.restore();
 }
 
-let backgroundLayerCanvas = null;
-let backgroundKey = "";
+const backgroundLayers = new Map();
+let backgroundSize = "";
 
-function backgroundLayer() {
-  const key = `${state.width}x${state.height}x${state.viewW}x${state.viewH}x${state.offsetX}x${state.offsetY}x${state.dpr}`;
-  if (backgroundLayerCanvas && backgroundKey === key) return backgroundLayerCanvas;
+function backgroundLayer(act) {
+  const size = `${state.width}x${state.height}x${state.viewW}x${state.viewH}x${state.offsetX}x${state.offsetY}x${state.dpr}`;
+  if (backgroundSize !== size) {
+    backgroundLayers.clear();
+    backgroundSize = size;
+  }
+  const key = `${size}|${act}`;
+  const cached = backgroundLayers.get(key);
+  if (cached) return cached;
+  const sky = ACT_SKY[act] || ACT_SKY[0];
   const layer = document.createElement("canvas");
   layer.width = Math.max(1, Math.ceil(state.width * state.dpr));
   layer.height = Math.max(1, Math.ceil(state.height * state.dpr));
   const g = layer.getContext("2d");
   g.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
-  g.fillStyle = "#04060c";
+  g.fillStyle = sky.edge;
   g.fillRect(0, 0, state.width, state.height);
   const gradient = g.createRadialGradient(
     state.offsetX + state.viewW / 2,
@@ -1334,13 +1407,22 @@ function backgroundLayer() {
     state.offsetY + state.viewH * 0.55,
     state.viewH * 0.8,
   );
-  gradient.addColorStop(0, "#0c1222");
-  gradient.addColorStop(1, "#04060c");
+  gradient.addColorStop(0, sky.glow);
+  gradient.addColorStop(1, sky.edge);
   g.fillStyle = gradient;
   g.fillRect(state.offsetX, state.offsetY, state.viewW, state.viewH);
-  backgroundLayerCanvas = layer;
-  backgroundKey = key;
+  backgroundLayers.set(key, layer);
   return layer;
+}
+
+function drawActSweep(blend) {
+  const y = state.offsetY + state.viewH * (blend * 1.15 - 0.08);
+  const band = ctx.createLinearGradient(0, y - state.viewH * 0.08, 0, y + state.viewH * 0.1);
+  band.addColorStop(0, "rgba(244, 252, 255, 0)");
+  band.addColorStop(0.5, "rgba(214, 244, 255, 0.2)");
+  band.addColorStop(1, "rgba(244, 252, 255, 0)");
+  ctx.fillStyle = band;
+  ctx.fillRect(state.offsetX, y - state.viewH * 0.08, state.viewW, state.viewH * 0.18);
 }
 
 let glowSprite = null;
@@ -1643,6 +1725,36 @@ function drawScore() {
   ctx.fillText(text, x + 1, y + 1);
   ctx.fillStyle = "rgba(244, 252, 255, 0.92)";
   ctx.fillText(text, x, y);
+  drawActBanner(y);
+}
+
+function drawActLine(text, y, size) {
+  ctx.font = font(size, 500);
+  ctx.fillStyle = "rgba(5, 6, 15, 0.8)";
+  ctx.fillText(text, state.viewW / 2 + 1, y + 1);
+  ctx.fillStyle = "rgba(244, 252, 255, 0.96)";
+  ctx.fillText(text, state.viewW / 2, y);
+}
+
+function drawActBanner(scoreTop) {
+  const left = state.actBannerLeft;
+  const banner = state.actBanner;
+  if (left <= 0 || !banner?.title) return;
+  const age = ACT_BANNER - left;
+  const fadeIn = Math.min(1, age / 0.28);
+  const fadeOut = Math.min(1, left / 0.55);
+  const alpha = Math.min(fadeIn, fadeOut);
+  const drop = (1 - fadeIn) * 8;
+  const titleY = scoreTop + Math.max(26, unit() * 0.06) + drop;
+  const button = settingsRect();
+  const detailY = button.y + button.h + 6 + drop;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  drawActLine(banner.title, titleY, Math.max(16, unit() * 0.04));
+  if (banner.detail) drawActLine(banner.detail, detailY, Math.max(14, unit() * 0.034));
+  ctx.restore();
 }
 
 function treeSpan() {
@@ -1913,16 +2025,6 @@ function drawIcon(icon, x, y, size, color) {
     ctx.moveTo(0, s * 0.72);
     ctx.bezierCurveTo(-s * 1.15, -s * 0.05, -s * 0.55, -s * 0.95, 0, -s * 0.38);
     ctx.bezierCurveTo(s * 0.55, -s * 0.95, s * 1.15, -s * 0.05, 0, s * 0.72);
-    ctx.closePath();
-    ctx.stroke();
-  } else if (icon === "slow") {
-    ctx.moveTo(-s * 0.45, -s * 0.7);
-    ctx.lineTo(s * 0.45, -s * 0.7);
-    ctx.lineTo(0, -s * 0.05);
-    ctx.closePath();
-    ctx.moveTo(-s * 0.45, s * 0.7);
-    ctx.lineTo(s * 0.45, s * 0.7);
-    ctx.lineTo(0, s * 0.05);
     ctx.closePath();
     ctx.stroke();
   } else if (icon === "gap") {

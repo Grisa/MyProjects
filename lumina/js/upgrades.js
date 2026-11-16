@@ -122,16 +122,6 @@ export const UPGRADES = [
     icon: "heart",
   },
   {
-    id: "pausa",
-    name: "Pausa",
-    text: "A queda e o nascimento ficam mais lentos.",
-    cost: 20,
-    col: 3,
-    row: 3,
-    requires: ["muralha"],
-    icon: "slow",
-  },
-  {
     id: "folga",
     name: "Folga",
     text: "Os inimigos demoram mais a nascer.",
@@ -283,7 +273,6 @@ export function bonuses(owned) {
     playerY: has("miolo") ? 0.785 : 0.82,
     rim: has("vela") ? 0.92 : 0.58,
     guard: has("respiro"),
-    speed: has("pausa") ? 0.88 : 1,
     interval: has("folga") ? 1.18 : 1,
   };
 }

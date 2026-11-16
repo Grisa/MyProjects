@@ -1,14 +1,33 @@
 /** Pure gameplay math. No DOM, so Node tests and the canvas game share it. */
 
 export const DIFFICULTY = {
-  stepSeconds: 7,
-  speedGrowth: 1.03,
-  intervalShrink: 0.92,
-  baseSpeed: 220,
-  baseInterval: 0.9,
-  minInterval: 0.28,
   referenceHeight: 844,
+  /** Share of the view the shadow crosses before it reaches the player. */
+  travelFraction: 0.85,
+  endlessEvery: 100,
+  endlessGrowth: 1.02,
 };
+
+/**
+ * Score bands. Travel is seconds until a shadow reaches the player.
+ * Interval is seconds between waves. Each act climbs to its own ceiling,
+ * and the next act starts where the last one stopped.
+ * Waves sit closer than the old flat 1.2 s / 0.9 s waits.
+ */
+export const ACT_PACE = [
+  { travel: [2.6, 1.7], interval: [0.72, 0.58] },
+  { travel: [1.7, 1.2], interval: [0.58, 0.48] },
+  { travel: [1.2, 0.95], interval: [0.48, 0.4] },
+];
+
+export const ENDLESS_PACE = { travel: 0.95, interval: 0.4 };
+
+export const ACT_LINES = [
+  null,
+  { title: "Ato 2", detail: "A lasca e o riso entram." },
+  { title: "Ato 3", detail: "A luz abre o campo." },
+  { title: "Sem fim", detail: "" },
+];
 
 export const BLOOM_SCORE = 400;
 export const BLOOM_SECONDS = 3;
@@ -293,14 +312,27 @@ export function staggerDrop(reach, random = Math.random) {
   return reach * (1.5 + random() * 2.8);
 }
 
-/** Wait before the next wave. One shadow until the field opens, then a pair. */
-export const WAVE_INTERVAL = { closed: 1.2, open: 0.9 };
-
 /** Lasca and riso join halfway to the bloom. The vigia waits for the open field. */
 export const CAST_SCORE = 200;
 
-export function waveInterval(opened) {
-  return opened ? WAVE_INTERVAL.open : WAVE_INTERVAL.closed;
+/** 0–199 act 1, 200–399 act 2, 400–599 act 3, 600+ endless. */
+export function actIndex(score) {
+  const points = Math.max(0, score);
+  if (points >= 600) return 3;
+  if (points >= 400) return 2;
+  if (points >= 200) return 1;
+  return 0;
+}
+
+export function actBanner(index) {
+  return ACT_LINES[index] || null;
+}
+
+/** Spoken line for the act change. The title and the detail stay on separate rows. */
+export function actLine(index) {
+  const banner = actBanner(index);
+  if (!banner) return "";
+  return banner.detail ? `${banner.title}. ${banner.detail}` : `${banner.title}.`;
 }
 
 /** Kind ids allowed at this point in the run, in roster order. */
@@ -316,16 +348,44 @@ export function castKinds(score, opened) {
  * Stays near 1 so two waves cannot land on top of each other.
  */
 export function spawnJitter(random = Math.random) {
-  return 0.85 + random() * 0.3;
+  return 0.93 + random() * 0.14;
+}
+
+function bandT(score, start, end) {
+  const span = end - start;
+  if (!(span > 0)) return 1;
+  return clamp((Math.max(0, score) - start) / span, 0, 1);
+}
+
+/** Travel time and wave interval at this score, both already at the act ceiling. */
+export function paceAt(score) {
+  const points = Math.max(0, score);
+  const act = actIndex(points);
+  if (act >= 3) {
+    const steps = Math.floor((points - 600) / DIFFICULTY.endlessEvery);
+    const lift = DIFFICULTY.endlessGrowth ** steps;
+    return {
+      act,
+      travel: ENDLESS_PACE.travel / lift,
+      interval: ENDLESS_PACE.interval / lift,
+    };
+  }
+  const pace = ACT_PACE[act];
+  const t = bandT(points, act * 200, (act + 1) * 200);
+  return {
+    act,
+    travel: pace.travel[0] + (pace.travel[1] - pace.travel[0]) * t,
+    interval: pace.interval[0] + (pace.interval[1] - pace.interval[0]) * t,
+  };
 }
 
 /**
  * Seconds until the next wave.
- * A slower fall waits longer by the same amount, so the gap on screen stays put.
+ * `intervalScale` is the Folga perk. The act already sets how close the waves sit.
  */
-export function waveWait(opened, fallScale = 1, intervalScale = 1, random = Math.random) {
-  const fall = Math.max(0.5, fallScale);
-  return waveInterval(opened) * intervalScale * spawnJitter(random) / fall;
+export function waveWait(score, intervalScale = 1, random = Math.random) {
+  const scale = Math.max(0.5, intervalScale);
+  return paceAt(score).interval * scale * spawnJitter(random);
 }
 
 /** Sideways offset that still covers a player who stays put. */
@@ -513,15 +573,14 @@ export function dueBeats(phrase, elapsed, cursor) {
   return { beats: ready, cursor: next };
 }
 
-export function difficultyAt(elapsedSeconds, viewHeight, config = DIFFICULTY) {
-  const elapsed = Math.max(0, elapsedSeconds);
+/**
+ * Field speed in px/s. `span` keeps the fall looking the same after the field opens:
+ * the world is drawn smaller, so the field has to move faster by the same amount.
+ */
+export function difficultyAt(score, viewHeight, span = 1) {
+  const pace = paceAt(score);
   const height = Math.max(1, viewHeight);
-  const steps = Math.floor(elapsed / config.stepSeconds);
-  const heightScale = height / config.referenceHeight;
-  const speed = config.baseSpeed * heightScale * config.speedGrowth ** steps;
-  const interval = Math.max(
-    config.minInterval,
-    config.baseInterval * config.intervalShrink ** steps,
-  );
-  return { steps, speed, interval };
+  const visual = (DIFFICULTY.referenceHeight * DIFFICULTY.travelFraction) / pace.travel;
+  const speed = visual * (height / DIFFICULTY.referenceHeight) * Math.max(0.05, span);
+  return { ...pace, speed };
 }
