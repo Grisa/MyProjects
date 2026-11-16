@@ -13,7 +13,9 @@ import {
   fieldDust,
   laneNudge,
   pairXs,
+  castKinds,
   spawnJitter,
+  waveInterval,
   staggerDrop,
   variedGap,
   difficultyAt,
@@ -500,17 +502,20 @@ function endRun() {
   noteDeath();
 }
 
-function pickKind() {
-  let roll = Math.random() * KINDS.reduce((sum, kind) => sum + kind.weight, 0);
-  for (const kind of KINDS) {
+function pickKind(except) {
+  const allowed = new Set(castKinds(state.score, state.opened));
+  const pool = KINDS.filter((kind) => allowed.has(kind.kind) && kind.kind !== except);
+  const source = pool.length ? pool : KINDS.filter((kind) => allowed.has(kind.kind));
+  let roll = Math.random() * source.reduce((sum, kind) => sum + kind.weight, 0);
+  for (const kind of source) {
     roll -= kind.weight;
     if (roll < 0) return kind;
   }
-  return KINDS[0];
+  return source[0];
 }
 
-function rollEnemy() {
-  const picked = pickKind();
+function rollEnemy(except) {
+  const picked = pickKind(except);
   const r = clamp(
     state.viewH * (0.038 + Math.random() * 0.022) * picked.scale,
     16,
@@ -570,10 +575,10 @@ function spawnEnemy() {
 /** A pair with a changing gap. One often sits on the player's lane, and the other arrives later. */
 function spawnPair() {
   const a = rollEnemy();
-  const b = rollEnemy();
+  const b = rollEnemy(a.kind);
   const reach = Math.max(a.r, b.r);
   const margin = reach + 6;
-  const minGap = a.r + b.r + unit() * 0.1;
+  const minGap = a.r + b.r + unit() * 0.2;
   const maxGap = Math.max(minGap, fieldW() * (state.opened ? 0.5 : 0.34));
   const gap = variedGap(minGap, maxGap);
   const lead = -(reach + 6);
@@ -770,16 +775,14 @@ function update(dt) {
     if (!state.dying) {
       state.elapsed += dt;
       state.calm += dt;
-      const { speed, interval } = difficultyAt(state.elapsed, state.viewH);
+      const { speed } = difficultyAt(state.elapsed, state.viewH);
       if (state.surgeLeft <= 0) {
         state.spawnTimer -= dt;
-        let spawned = 0;
-        while (state.spawnTimer <= 0 && spawned < 3) {
-          const pair = state.opened || (state.elapsed > 8 && Math.random() < 0.36);
-          if (pair) spawnPair();
+        if (state.spawnTimer <= 0) {
+          if (state.opened) spawnPair();
           else spawnEnemy();
-          state.spawnTimer += interval * perk.interval * spawnJitter();
-          spawned += 1;
+          const wait = waveInterval(state.opened) * perk.interval * spawnJitter();
+          state.spawnTimer = Math.max(state.spawnTimer + wait, wait);
         }
       }
       state.sparkTimer -= dt;

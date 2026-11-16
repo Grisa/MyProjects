@@ -293,9 +293,30 @@ export function staggerDrop(reach, random = Math.random) {
   return reach * (1.5 + random() * 2.8);
 }
 
-/** Multiplier for the wait before the next wave. */
+/** Wait before the next wave. One shadow until the field opens, then a pair. */
+export const WAVE_INTERVAL = { closed: 1.2, open: 0.9 };
+
+/** Lasca and riso join halfway to the bloom. The vigia waits for the open field. */
+export const CAST_SCORE = 200;
+
+export function waveInterval(opened) {
+  return opened ? WAVE_INTERVAL.open : WAVE_INTERVAL.closed;
+}
+
+/** Kind ids allowed at this point in the run, in roster order. */
+export function castKinds(score, opened) {
+  const kinds = ["orb", "diamond"];
+  if (score >= CAST_SCORE || opened) kinds.push("shard", "grin");
+  if (opened) kinds.push("lantern");
+  return kinds;
+}
+
+/**
+ * Multiplier for the wait before the next wave.
+ * Stays near 1 so two waves cannot land on top of each other.
+ */
 export function spawnJitter(random = Math.random) {
-  return 0.68 + random() * 0.74;
+  return 0.85 + random() * 0.3;
 }
 
 /** Sideways offset that still covers a player who stays put. */

@@ -18,8 +18,12 @@ import {
   fieldDust,
   laneNudge,
   pairXs,
+  CAST_SCORE,
+  castKinds,
   spawnJitter,
   staggerDrop,
+  WAVE_INTERVAL,
+  waveInterval,
   variedGap,
   difficultyAt,
   passScore,
@@ -224,8 +228,13 @@ test("waves vary their gap, height, timing, and lane", () => {
   let step = 0;
   const staggerRolls = [0.5, 0];
   assert.equal(staggerDrop(20, () => staggerRolls[step++]), 30);
-  assert.equal(spawnJitter(() => 0), 0.68);
-  assert.equal(spawnJitter(() => 1), 1.42);
+  assert.equal(spawnJitter(() => 0), 0.85);
+  assert.equal(spawnJitter(() => 1), 1.15);
+  assert.equal(waveInterval(false), WAVE_INTERVAL.closed);
+  assert.equal(waveInterval(true), WAVE_INTERVAL.open);
+  assert.deepEqual(castKinds(0, false), ["orb", "diamond"]);
+  assert.deepEqual(castKinds(CAST_SCORE, false), ["orb", "diamond", "shard", "grin"]);
+  assert.deepEqual(castKinds(CAST_SCORE, true), ["orb", "diamond", "shard", "grin", "lantern"]);
 
   const nudge = laneNudge(30, () => 0);
   assert.equal(nudge, -6);
