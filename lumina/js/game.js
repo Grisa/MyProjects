@@ -606,7 +606,7 @@ function placeEnemy(body, x, y) {
     phase: Math.random() * Math.PI * 2,
     fall: 0.74 + Math.random() * 0.52,
     drift: body.kind === "diamond" ? (Math.random() < 0.5 ? -1 : 1) : 1,
-    commit: body.kind === "lantern" ? fieldH() * (0.16 + Math.random() * 0.2) : 0,
+    commit: body.kind === "lantern" ? fieldH() * (0.42 + Math.random() * 0.14) : 0,
   });
 }
 

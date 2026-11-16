@@ -15,12 +15,18 @@ export const DIFFICULTY = {
  * Waves sit closer than the old flat 1.2 s / 0.9 s waits.
  */
 export const ACT_PACE = [
-  { travel: [2.6, 1.7], interval: [0.72, 0.58] },
-  { travel: [1.7, 1.2], interval: [0.58, 0.48] },
-  { travel: [1.2, 0.95], interval: [0.48, 0.4] },
+  { travel: [2.6, 2.05], interval: [0.72, 0.58] },
+  { travel: [2.05, 1.6], interval: [0.58, 0.48] },
+  { travel: [1.6, 1.35], interval: [0.48, 0.4] },
 ];
 
-export const ENDLESS_PACE = { travel: 0.95, interval: 0.4 };
+export const ENDLESS_PACE = { travel: 1.35, interval: 0.4 };
+
+/** Sideways speed of a caco, as a share of the fall. Low enough to read the bounce. */
+export const DIAMOND_SLIDE = 0.34;
+/** Vigia holds, then dives only a little faster than the other shadows. */
+export const LANTERN_CRAWL = 0.34;
+export const LANTERN_DIVE = 1.25;
 
 export const ACT_LINES = [
   null,
@@ -227,7 +233,7 @@ export function enemyStep(enemy, dt, speed, time, width, left = 0) {
     const home = enemy.homeX ?? x;
     x = clamp(home + Math.sin(time * 1.05 + (enemy.phase || 0)) * r * 1.55, lo, hi);
   } else if (enemy.kind === "diamond") {
-    x += speed * 0.62 * fall * drift * dt;
+    x += speed * DIAMOND_SLIDE * fall * drift * dt;
     if (x <= lo) {
       x = lo;
       drift = 1;
@@ -236,7 +242,8 @@ export function enemyStep(enemy, dt, speed, time, width, left = 0) {
       drift = -1;
     }
   }
-  const rush = enemy.kind === "lantern" && enemy.y >= (enemy.commit ?? Infinity) ? 1.7 : enemy.kind === "lantern" ? 0.34 : 1;
+  const diving = enemy.kind === "lantern" && enemy.y >= (enemy.commit ?? Infinity);
+  const rush = enemy.kind === "lantern" ? (diving ? LANTERN_DIVE : LANTERN_CRAWL) : 1;
   enemy.x = x;
   enemy.y += speed * fall * rush * dt;
   enemy.drift = drift;

@@ -37,6 +37,9 @@ import {
   staggerDrop,
   waveWait,
   variedGap,
+  DIAMOND_SLIDE,
+  LANTERN_CRAWL,
+  LANTERN_DIVE,
   difficultyAt,
   passScore,
   edgeFacing,
@@ -140,17 +143,22 @@ test("each shadow moves in its own way", () => {
   assert.ok(Math.abs(grin.x - 131) < 1e-6);
   assert.ok(Math.abs(grin.x - 100) > Math.abs(shard.x - 100));
 
-  const caco = { kind: "diamond", x: 80, y: 10, r: 10, fall: 1, drift: 1 };
-  enemyStep(caco, 0.5, 100, 0, 100);
-  assert.equal(caco.x, 90);
-  assert.equal(caco.drift, -1);
+  const caco = { kind: "diamond", x: 40, y: 10, r: 10, fall: 1, drift: 1 };
+  enemyStep(caco, 0.5, 100, 0, 400);
+  assert.ok(Math.abs(caco.x - (40 + 100 * DIAMOND_SLIDE * 0.5)) < 1e-9);
+  assert.ok(DIAMOND_SLIDE < 0.45);
+  const wall = { kind: "diamond", x: 80, y: 10, r: 10, fall: 1, drift: 1 };
+  enemyStep(wall, 0.5, 100, 0, 100);
+  assert.equal(wall.x, 90);
+  assert.equal(wall.drift, -1);
 
   const slow = { kind: "lantern", x: 40, y: 0, r: 10, fall: 1, commit: 30 };
   enemyStep(slow, 1, 10, 0, 200);
-  assert.ok(Math.abs(slow.y - 3.4) < 1e-9);
+  assert.ok(Math.abs(slow.y - 10 * LANTERN_CRAWL) < 1e-9);
   slow.y = 30;
   enemyStep(slow, 1, 10, 0, 200);
-  assert.ok(Math.abs(slow.y - 47) < 1e-9);
+  assert.ok(Math.abs(slow.y - (30 + 10 * LANTERN_DIVE)) < 1e-9);
+  assert.ok(LANTERN_DIVE < 1.4);
 });
 
 test("enemy hit test uses the core, not the glow", () => {
@@ -213,6 +221,7 @@ test("each act climbs to its own ceiling and the next act continues it", () => {
   assert.ok(Math.abs(lateAct.interval - actTwo.interval) < 0.01);
   assert.ok(Math.abs(paceAt(399).travel - paceAt(400).travel) < 0.01);
   assert.ok(Math.abs(paceAt(599).travel - ENDLESS_PACE.travel) < 0.01);
+  assert.ok(paceAt(399).travel >= 1.55);
   assert.equal(paceAt(400).interval, ACT_PACE[2].interval[0]);
   assert.ok(paceAt(500).interval < 0.5);
 
