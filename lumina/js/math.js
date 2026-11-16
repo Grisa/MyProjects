@@ -425,6 +425,93 @@ export function edgeSlots(x, width, radius, gap, side) {
   return [aimed, inward];
 }
 
+/** First mantle, then again after each chapter, once the run has moved on. */
+export const BOSS_SCORE = 600;
+export const BOSS_GAP = 300;
+export const BOSS_HITS = 3;
+export const BOSS_ARRIVE = 1.15;
+export const BOSS_BETWEEN = 0.6;
+export const BOSS_LEAVE = 0.7;
+export const BOSS_PHRASES = ["gap", "sweep", "stair", "dive"];
+
+export function bossThreshold(visit) {
+  return BOSS_SCORE + Math.max(0, visit) * BOSS_GAP;
+}
+
+/** Same four phrases, in a new order. Each phrase stays in the deck once. */
+export function shufflePhrases(random = Math.random) {
+  const deck = BOSS_PHRASES.slice();
+  for (let i = deck.length - 1; i > 0; i -= 1) {
+    const j = Math.min(i, Math.floor(random() * (i + 1)));
+    const swap = deck[i];
+    deck[i] = deck[j];
+    deck[j] = swap;
+  }
+  return deck;
+}
+
+/**
+ * One choreographed phrase. Exactly one beat is the light core.
+ * `x` is a fraction of the field width. Beats are in time order.
+ * The pocket is chosen when the phrase is dealt, then it stays put.
+ */
+export function bossPhrase(id, random = Math.random) {
+  if (id === "sweep") {
+    const slots = [0.18, 0.39, 0.61, 0.82];
+    const pocket = Math.min(slots.length - 1, Math.floor(random() * slots.length));
+    const beats = slots.map((x, index) => (
+      index === pocket
+        ? { t: 0.16, x, role: "core" }
+        : { t: 0, x, role: "shadow", kind: "orb" }
+    ));
+    beats.sort((a, b) => a.t - b.t || a.x - b.x);
+    return { id, beats };
+  }
+  if (id === "stair") {
+    const flip = random() < 0.5;
+    const side = (x) => (flip ? 1 - x : x);
+    return {
+      id,
+      beats: [
+        { t: 0, x: side(0.24), role: "shadow", kind: "orb" },
+        { t: 0.2, x: 0.5, role: "core" },
+        { t: 0.62, x: 0.5, role: "shadow", kind: "orb" },
+        { t: 0.62, x: side(0.76), role: "shadow", kind: "orb" },
+      ],
+    };
+  }
+  if (id === "dive") {
+    const left = random() < 0.5;
+    return {
+      id,
+      beats: [
+        { t: 0, x: left ? 0.28 : 0.72, role: "shadow", kind: "lantern" },
+        { t: 0.4, x: left ? 0.72 : 0.28, role: "core" },
+      ],
+    };
+  }
+  return {
+    id: "gap",
+    beats: [
+      { t: 0, x: 0.3, role: "shadow", kind: "orb" },
+      { t: 0, x: 0.7, role: "shadow", kind: "orb" },
+      { t: 0.18, x: 0.5, role: "core" },
+    ],
+  };
+}
+
+/** Beats that have come due since `cursor`. A late clock releases each beat once. */
+export function dueBeats(phrase, elapsed, cursor) {
+  const beats = phrase.beats;
+  const ready = [];
+  let next = cursor;
+  while (next < beats.length && beats[next].t <= elapsed + 0.0001) {
+    ready.push(beats[next]);
+    next += 1;
+  }
+  return { beats: ready, cursor: next };
+}
+
 export function difficultyAt(elapsedSeconds, viewHeight, config = DIFFICULTY) {
   const elapsed = Math.max(0, elapsedSeconds);
   const height = Math.max(1, viewHeight);

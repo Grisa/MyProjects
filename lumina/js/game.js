@@ -7,6 +7,13 @@ import {
   BLOOM_SPAN,
   bloomEase,
   bloomSpan,
+  BOSS_ARRIVE,
+  BOSS_BETWEEN,
+  BOSS_HITS,
+  BOSS_LEAVE,
+  bossPhrase,
+  bossThreshold,
+  shufflePhrases,
   aimPair,
   edgeCamp,
   edgeSlots,
@@ -34,6 +41,9 @@ import {
   getSfxVolume,
   playBegin,
   playBloom,
+  playBoss,
+  playBossEnd,
+  playBossHit,
   playBuy,
   playDeath,
   playGraze,
@@ -71,6 +81,7 @@ const TUTORIAL_PAGES = [
     lines: ["Aos 400 a visão abre e caem dois.", "Ficar no canto não esconde."],
   },
 ];
+const BOSS_HIT_LINES = ["Uma luz.", "Duas luzes."];
 const CODEX = [
   {
     kind: "orb",
@@ -101,6 +112,12 @@ const CODEX = [
     tint: "blue",
     title: "Riso",
     lines: ["Abre um S largo.", "Devagar, de um lado ao outro."],
+  },
+  {
+    kind: "mantle",
+    tint: "violet",
+    title: "Manto",
+    lines: ["Cobre o topo aos 600.", "A luz no vão acerta. Três vezes."],
   },
 ];
 const PORTRAIT = 9 / 16;
@@ -177,6 +194,8 @@ const state = {
   surgeLeft: 0,
   opened: false,
   flash: 0,
+  boss: null,
+  bossVisit: 0,
 };
 
 function loadHintSeen() {
@@ -459,6 +478,8 @@ function resetRun(pointerX) {
   state.surgeLeft = 0;
   state.opened = false;
   state.flash = 0;
+  state.boss = null;
+  state.bossVisit = 0;
   state.player = makePlayer(Number.isFinite(pointerX) ? pointerX : state.viewW / 2);
   state.enemies = [];
   state.orbs = [];
@@ -733,6 +754,164 @@ function maybeBloom() {
   announce("A luz abre.");
 }
 
+function bossShape() {
+  const shown = state.boss ? state.boss.shown : 0;
+  const top = (state.safeTop + 58) * state.span;
+  const rx = fieldW() * 0.4;
+  const ry = Math.min(fieldH() * 0.07, unit() * 0.11 * state.span);
+  const rest = top + ry;
+  const y = rest + (1 - shown) * (-ry * 2.6);
+  return { x: fieldW() * 0.5, y, rx, ry };
+}
+
+function bossLane(fraction, radius) {
+  const margin = radius + 4;
+  const width = fieldW();
+  return clamp(width * fraction, margin, Math.max(margin, width - margin));
+}
+
+function laneQuiet() {
+  if (state.enemies.length > 0) return false;
+  return !state.orbs.some((orb) => orb.core);
+}
+
+function emitBossBeat(beat, y) {
+  if (beat.role === "core") {
+    const r = clamp(state.viewH * 0.02, 9, fieldW() * 0.05);
+    state.orbs.push({
+      x: bossLane(beat.x, r),
+      y,
+      r,
+      core: true,
+    });
+    return;
+  }
+  const r = clamp(state.viewH * 0.042, 18, fieldW() * 0.09);
+  const kind = beat.kind || "orb";
+  placeEnemy(
+    { kind, tint: kind === "lantern" ? "copper" : "violet", r },
+    bossLane(beat.x, r),
+    y,
+  );
+  const enemy = state.enemies[state.enemies.length - 1];
+  enemy.fall = 1;
+  enemy.homeX = enemy.x;
+  if (kind === "lantern") enemy.commit = fieldH() * 0.22;
+}
+
+function beginBoss() {
+  state.boss = {
+    phase: "arrive",
+    timer: BOSS_ARRIVE,
+    hits: 0,
+    shown: 0,
+    flash: 0,
+    phrase: null,
+    deck: shufflePhrases(),
+    deckIndex: 0,
+  };
+  playBoss();
+  announce("O Manto cobre o topo.");
+}
+
+function startBossPhrase() {
+  const boss = state.boss;
+  if (!boss || boss.hits >= BOSS_HITS) {
+    dismissBoss();
+    return;
+  }
+  if (boss.deckIndex >= boss.deck.length) {
+    boss.deck = shufflePhrases();
+    boss.deckIndex = 0;
+  }
+  boss.phrase = bossPhrase(boss.deck[boss.deckIndex]);
+  boss.deckIndex += 1;
+  boss.phase = "fall";
+  const shape = bossShape();
+  const lip = shape.y + shape.ry + 18;
+  for (const beat of boss.phrase.beats) {
+    emitBossBeat(beat, lip + (0.7 - beat.t) * fieldH() * 0.38);
+  }
+}
+
+function dismissBoss() {
+  const boss = state.boss;
+  if (!boss || boss.phase === "leave") return;
+  boss.phase = "leave";
+  boss.timer = BOSS_LEAVE;
+  boss.flash = 1;
+  const shape = bossShape();
+  burst(shape.x, shape.y + shape.ry * 0.4);
+  state.shake = 0.55;
+  playBossEnd();
+  announce("O Manto se abre.");
+}
+
+function finishBoss() {
+  while (state.score >= bossThreshold(state.bossVisit)) state.bossVisit += 1;
+  state.boss = null;
+  state.spawnTimer = waveInterval(true);
+}
+
+function maybeBoss() {
+  if (state.boss || state.dying || !state.opened || state.surgeLeft > 0) return;
+  if (state.score < bossThreshold(state.bossVisit)) return;
+  beginBoss();
+}
+
+function tickBoss(dt) {
+  const boss = state.boss;
+  if (!boss) return;
+  boss.flash = Math.max(0, boss.flash - dt * 2.2);
+  if (boss.phase === "arrive") {
+    if (boss.timer > 0) {
+      boss.timer = Math.max(0, boss.timer - dt);
+      boss.shown = 1 - boss.timer / BOSS_ARRIVE;
+      return;
+    }
+    boss.shown = 1;
+    if (laneQuiet()) startBossPhrase();
+    return;
+  }
+  if (boss.phase === "fall") {
+    boss.shown = 1;
+    if (laneQuiet()) {
+      boss.phase = "rest";
+      boss.timer = BOSS_BETWEEN;
+    }
+    return;
+  }
+  if (boss.phase === "rest") {
+    if (boss.hits >= BOSS_HITS) {
+      dismissBoss();
+      return;
+    }
+    boss.timer -= dt;
+    if (boss.timer <= 0 && laneQuiet()) startBossPhrase();
+    return;
+  }
+  boss.timer -= dt;
+  boss.shown = clamp(boss.timer / BOSS_LEAVE, 0, 1);
+  if (boss.timer <= 0) finishBoss();
+}
+
+function strikeBoss(orb) {
+  const boss = state.boss;
+  if (!boss || boss.phase === "leave") return;
+  boss.hits += 1;
+  boss.flash = 1;
+  const player = state.player;
+  player.targetLight = Math.min(
+    player.initialLight,
+    player.targetLight + player.initialLight * 0.16,
+  );
+  popup(orb.x, orb.y, "luz");
+  burst(orb.x, orb.y);
+  playBossHit();
+  if (boss.hits >= BOSS_HITS) dismissBoss();
+  else announce(BOSS_HIT_LINES[boss.hits - 1] || "Uma luz.");
+}
+
 function tickBloom(dt) {
   if (state.flash > 0) state.flash = Math.max(0, state.flash - dt * 1.35);
   if (state.surgeLeft <= 0) return;
@@ -776,7 +955,8 @@ function update(dt) {
       state.elapsed += dt;
       state.calm += dt;
       const { speed } = difficultyAt(state.elapsed, state.viewH);
-      if (state.surgeLeft <= 0) {
+      if (state.boss) tickBoss(dt);
+      if (!state.boss && state.surgeLeft <= 0) {
         state.spawnTimer -= dt;
         if (state.spawnTimer <= 0) {
           if (state.opened) spawnPair();
@@ -785,10 +965,12 @@ function update(dt) {
           state.spawnTimer = Math.max(state.spawnTimer + wait, wait);
         }
       }
-      state.sparkTimer -= dt;
-      if (state.sparkTimer <= 0) {
-        spawnSpark();
-        state.sparkTimer += perk.sparkInterval;
+      if (!state.boss) {
+        state.sparkTimer -= dt;
+        if (state.sparkTimer <= 0) {
+          spawnSpark();
+          state.sparkTimer += perk.sparkInterval;
+        }
       }
       if (perk.regen > 0 && state.calm >= perk.calmDelay && player.targetLight < player.initialLight) {
         player.targetLight = Math.min(
@@ -826,7 +1008,7 @@ function update(dt) {
           if (!state.dying) {
             const gained = enemy.points ?? 1;
             state.score += gained;
-            announce(`Pontos ${state.score}`);
+            if (!state.boss || state.boss.phase !== "arrive") announce(`Pontos ${state.score}`);
             if (gained === 1) playPass();
             maybeBloom();
           }
@@ -837,8 +1019,8 @@ function update(dt) {
       for (let i = state.orbs.length - 1; i >= 0; i -= 1) {
         const orb = state.orbs[i];
         const previousY = orb.y;
-        orb.y += speed * dt;
-        if (magnet > 0) {
+        orb.y += speed * (orb.core ? perk.speed : 1) * dt;
+        if (!orb.core && magnet > 0) {
           const dx = player.x - orb.x;
           const dy = player.y - orb.y;
           const distance = Math.hypot(dx, dy);
@@ -855,11 +1037,13 @@ function update(dt) {
             && circlesOverlap(player.x, player.y, reach, orb.x, player.y, orb.r));
         if (caught) {
           const taken = state.orbs.splice(i, 1)[0];
-          collectSpark(taken);
+          if (taken.core) strikeBoss(taken);
+          else collectSpark(taken);
           continue;
         }
         if (orb.y - orb.r > fieldH()) state.orbs.splice(i, 1);
       }
+      maybeBoss();
     }
 
     player.lightRadius = lerp(player.lightRadius, player.targetLight, LIGHT_LERP, dt);
@@ -1340,6 +1524,58 @@ function drawPersona(enemy, color, beam, points) {
 }
 
 let frameRim = 0.58;
+
+function drawBossCore(orb) {
+  const pulse = 0.82 + Math.sin(state.time * 7) * 0.18;
+  drawGlow(orb.x, orb.y, orb.r * 3.4, 0.92 * pulse);
+  ctx.fillStyle = "#f7feff";
+  ctx.beginPath();
+  ctx.arc(orb.x, orb.y, orb.r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/** Wide silhouette across the top. Three motes mark the lights still to catch. */
+function drawBoss() {
+  const boss = state.boss;
+  if (!boss || boss.shown <= 0.02) return;
+  const shape = bossShape();
+  const eye = boss.phase === "fall" ? 1 : boss.phase === "rest" ? 0.45 : boss.shown;
+  ctx.save();
+  ctx.globalAlpha = clamp(boss.shown, 0, 1);
+  ctx.fillStyle = "#05070f";
+  ctx.beginPath();
+  ctx.ellipse(shape.x, shape.y, shape.rx, shape.ry, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = `rgba(188, 150, 255, ${0.35 + eye * 0.45})`;
+  ctx.lineWidth = Math.max(2, shape.ry * 0.14);
+  ctx.beginPath();
+  ctx.ellipse(shape.x, shape.y, shape.rx * 0.96, shape.ry * 0.92, 0, 0.18, Math.PI - 0.18);
+  ctx.stroke();
+  const look = clamp((state.player.x - shape.x) / fieldW(), -1, 1) * shape.rx * 0.05;
+  const eyeX = shape.x + look;
+  const eyeY = shape.y - shape.ry * 0.08;
+  const slitW = shape.rx * 0.07;
+  const slitH = Math.max(2, shape.ry * 0.16 * eye);
+  ctx.fillStyle = boss.flash > 0.2 ? "rgba(247, 254, 255, 0.95)" : "rgba(214, 236, 255, 0.9)";
+  ctx.beginPath();
+  ctx.ellipse(eyeX, eyeY, slitW, slitH, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#07090f";
+  ctx.beginPath();
+  ctx.arc(eyeX, eyeY, slitH * 0.55, 0, Math.PI * 2);
+  ctx.fill();
+  for (let i = 0; i < BOSS_HITS; i += 1) {
+    const lit = i < boss.hits;
+    const mx = shape.x + (i - 1) * shape.rx * 0.16;
+    const my = shape.y + shape.ry * 0.62;
+    const mr = Math.max(4, shape.ry * 0.16);
+    ctx.beginPath();
+    ctx.arc(mx, my, mr, 0, Math.PI * 2);
+    ctx.fillStyle = lit ? "rgba(247, 254, 255, 0.96)" : "rgba(186, 204, 220, 0.38)";
+    ctx.fill();
+  }
+  ctx.restore();
+}
 
 /** Dark body, a faint colored rim in the dark, and a face that appears in the light. */
 function drawEnemy(enemy) {
@@ -2340,8 +2576,38 @@ function codexFrame() {
   return { x: (state.viewW - w) / 2, y: top, w, h };
 }
 
+function drawMantlePreview(frame) {
+  const mid = frame.x + frame.w / 2;
+  const top = frame.y + frame.h * 0.16;
+  const rx = frame.w * 0.34;
+  const ry = frame.h * 0.055;
+  ctx.fillStyle = "#05070f";
+  ctx.beginPath();
+  ctx.ellipse(mid, top, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(188, 150, 255, 0.75)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(mid, top, rx * 0.96, ry * 0.9, 0, 0.2, Math.PI - 0.2);
+  ctx.stroke();
+  ctx.fillStyle = "rgba(247, 254, 255, 0.9)";
+  ctx.beginPath();
+  ctx.ellipse(mid, top, ry * 0.7, ry * 0.28, 0, 0, Math.PI * 2);
+  ctx.fill();
+  const cycle = (state.time % 2.6) / 2.6;
+  const fall = top + ry + cycle * frame.h * 0.58;
+  const r = frame.w * 0.055;
+  drawEnemy({ kind: "orb", tint: "violet", x: mid - frame.w * 0.2, y: fall, r, phase: 0.2 });
+  drawEnemy({ kind: "orb", tint: "violet", x: mid + frame.w * 0.2, y: fall, r, phase: 1.1 });
+  drawBossCore({ x: mid, y: fall, r: r * 0.42 });
+}
+
 function ensureCodexEnemy() {
   const page = CODEX[state.codexPage];
+  if (page.kind === "mantle") {
+    state.codexEnemy = { kind: "mantle" };
+    return state.codexEnemy;
+  }
   const frame = codexFrame();
   const enemy = state.codexEnemy;
   if (enemy && enemy.kind === page.kind) return enemy;
@@ -2362,6 +2628,10 @@ function ensureCodexEnemy() {
 }
 
 function stepCodex(dt) {
+  if (CODEX[state.codexPage].kind === "mantle") {
+    state.codexEnemy = { kind: "mantle" };
+    return;
+  }
   const frame = codexFrame();
   const enemy = ensureCodexEnemy();
   enemyStep(enemy, dt, frame.h * 0.28, state.time, frame.x + frame.w, frame.x);
@@ -2401,7 +2671,8 @@ function drawCodex() {
   withPlayer(tutorialStandIn(ballX, ballY, light, core), () => {
     frameRim = 0.72;
     drawGlow(ballX, ballY, light, 1);
-    drawEnemy(enemy);
+    if (page.kind === "mantle") drawMantlePreview(frame);
+    else drawEnemy(enemy);
     drawCore(ballX, ballY, core);
   });
   ctx.restore();
@@ -2499,8 +2770,12 @@ function draw() {
     if (state.mode === "play" || state.mode === "paused") {
       ctx.lineJoin = "round";
       ctx.lineCap = "round";
+      if (state.boss) drawBoss();
       for (const enemy of state.enemies) drawEnemy(enemy);
-      for (const orb of state.orbs) drawSparkGlyph(orb.x, orb.y, orb.r);
+      for (const orb of state.orbs) {
+        if (orb.core) drawBossCore(orb);
+        else drawSparkGlyph(orb.x, orb.y, orb.r);
+      }
     }
     drawParticles();
     for (const floater of state.floaters) {

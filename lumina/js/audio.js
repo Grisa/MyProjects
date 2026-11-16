@@ -329,6 +329,24 @@ export function playBloom() {
   tone(784, 0.7, 0.05);
 }
 
+export function playBoss() {
+  unlock();
+  sweep(82, 196, 0.72, 0.11);
+  tone(98, 0.86, 0.06, "triangle");
+}
+
+export function playBossHit() {
+  tone(698, 0.12, 0.055);
+  tone(1046, 0.22, 0.04);
+}
+
+export function playBossEnd() {
+  unlock();
+  sweep(164, 740, 0.58, 0.09);
+  tone(392, 0.36, 0.05);
+  tone(587, 0.52, 0.038);
+}
+
 export function playPass() {
   tone(920 + Math.random() * 180, 0.07, 0.025);
 }

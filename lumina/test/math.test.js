@@ -12,6 +12,14 @@ import {
   BLOOM_SPAN,
   bloomEase,
   bloomSpan,
+  BOSS_GAP,
+  BOSS_HITS,
+  BOSS_PHRASES,
+  BOSS_SCORE,
+  bossPhrase,
+  bossThreshold,
+  dueBeats,
+  shufflePhrases,
   aimPair,
   edgeCamp,
   edgeSlots,
@@ -260,6 +268,72 @@ test("camping a corner pulls the next enemy onto that side", () => {
   const right = edgeSlots(590, 600, 30, 180, 1);
   assert.ok(right[0] > 560);
   assert.ok(right[1] < right[0] - 100);
+});
+
+test("the mantle waits at 600 and returns 300 points later", () => {
+  assert.equal(BOSS_SCORE, 600);
+  assert.equal(BOSS_GAP, 300);
+  assert.equal(BOSS_HITS, 3);
+  assert.equal(bossThreshold(0), 600);
+  assert.equal(bossThreshold(1), 900);
+  assert.equal(bossThreshold(2), 1200);
+});
+
+test("each mantle phrase keeps one light inside a fixed pocket", () => {
+  for (const id of BOSS_PHRASES) {
+    const phrase = bossPhrase(id, () => 0);
+    const cores = phrase.beats.filter((beat) => beat.role === "core");
+    assert.equal(cores.length, 1);
+    assert.equal(phrase.beats.length >= 2, true);
+    for (let i = 1; i < phrase.beats.length; i += 1) {
+      assert.ok(phrase.beats[i].t >= phrase.beats[i - 1].t);
+    }
+    assert.ok(cores[0].x > 0.15 && cores[0].x < 0.85);
+  }
+
+  const gate = bossPhrase("gap", () => 0);
+  const walls = gate.beats.filter((beat) => beat.role === "shadow").map((beat) => beat.x);
+  const gateCore = gate.beats.find((beat) => beat.role === "core");
+  assert.ok(gateCore.x - walls[0] >= 0.15);
+  assert.ok(walls[1] - gateCore.x >= 0.15);
+
+  const stair = bossPhrase("stair", () => 0);
+  const stepCore = stair.beats.find((beat) => beat.role === "core");
+  const follower = stair.beats.find(
+    (beat) => beat.role === "shadow" && beat.x === stepCore.x && beat.t > stepCore.t,
+  );
+  assert.ok(follower);
+
+  const sweepA = bossPhrase("sweep", () => 0).beats.find((beat) => beat.role === "core");
+  const sweepB = bossPhrase("sweep", () => 0.99).beats.find((beat) => beat.role === "core");
+  assert.notEqual(sweepA.x, sweepB.x);
+
+  const diveLeft = bossPhrase("dive", () => 0);
+  const diveRight = bossPhrase("dive", () => 0.9);
+  assert.equal(diveLeft.beats[0].kind, "lantern");
+  assert.notEqual(diveLeft.beats[0].x, diveRight.beats[0].x);
+  assert.notEqual(diveLeft.beats[1].x, diveLeft.beats[0].x);
+});
+
+test("a phrase releases each beat once, even when the clock jumps", () => {
+  const phrase = bossPhrase("stair", () => 0);
+  const opening = dueBeats(phrase, 0, 0);
+  assert.equal(opening.beats.length, 1);
+  assert.equal(opening.beats[0].role, "shadow");
+  const rest = dueBeats(phrase, 10, opening.cursor);
+  assert.equal(opening.cursor + rest.beats.length, phrase.beats.length);
+  assert.equal(rest.beats.filter((beat) => beat.role === "core").length, 1);
+  const again = dueBeats(phrase, 10, rest.cursor);
+  assert.equal(again.beats.length, 0);
+  assert.equal(again.cursor, phrase.beats.length);
+});
+
+test("a shuffled mantle deck keeps every phrase once", () => {
+  let step = 0;
+  const rolls = [0.1, 0.9, 0.4];
+  const deck = shufflePhrases(() => rolls[step++]);
+  assert.deepEqual([...deck].sort(), [...BOSS_PHRASES].sort());
+  assert.equal(new Set(deck).size, BOSS_PHRASES.length);
 });
 
 test("field dust stays put, stays dim, and reaches past the first view", () => {
