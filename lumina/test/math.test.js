@@ -32,6 +32,7 @@ import {
   staggerDrop,
   WAVE_INTERVAL,
   waveInterval,
+  waveWait,
   variedGap,
   difficultyAt,
   passScore,
@@ -186,8 +187,14 @@ test("difficulty rises every 7 seconds and the spawn interval has a floor", () =
 
   const step = difficultyAt(7, DIFFICULTY.referenceHeight);
   assert.equal(step.steps, 1);
-  assert.ok(Math.abs(step.speed - DIFFICULTY.baseSpeed * 1.08) < 1e-9);
-  assert.ok(Math.abs(step.interval - DIFFICULTY.baseInterval * 0.92) < 1e-9);
+  assert.equal(DIFFICULTY.speedGrowth, 1.03);
+  assert.ok(Math.abs(step.speed - DIFFICULTY.baseSpeed * DIFFICULTY.speedGrowth) < 1e-9);
+  assert.ok(Math.abs(step.interval - DIFFICULTY.baseInterval * DIFFICULTY.intervalShrink) < 1e-9);
+
+  const midRun = difficultyAt(3 * 60, DIFFICULTY.referenceHeight);
+  const travel = DIFFICULTY.referenceHeight * 0.85;
+  const seconds = travel / midRun.speed;
+  assert.ok(seconds > 1.2 && seconds < 1.8);
 
   const justBefore = difficultyAt(6.99, DIFFICULTY.referenceHeight);
   assert.equal(justBefore.steps, 0);
@@ -240,6 +247,10 @@ test("waves vary their gap, height, timing, and lane", () => {
   assert.equal(spawnJitter(() => 1), 1.15);
   assert.equal(waveInterval(false), WAVE_INTERVAL.closed);
   assert.equal(waveInterval(true), WAVE_INTERVAL.open);
+  const calm = waveWait(false, 1, 1, () => 0.5);
+  const paused = waveWait(false, 0.88, 1, () => 0.5);
+  assert.ok(Math.abs(paused * 0.88 - calm) < 1e-9);
+  assert.ok(waveWait(false, 0.88, 1.18, () => 0.5) > paused);
   assert.deepEqual(castKinds(0, false), ["orb", "diamond"]);
   assert.deepEqual(castKinds(CAST_SCORE, false), ["orb", "diamond", "shard", "grin"]);
   assert.deepEqual(castKinds(CAST_SCORE, true), ["orb", "diamond", "shard", "grin", "lantern"]);

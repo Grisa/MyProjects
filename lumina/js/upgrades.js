@@ -124,7 +124,7 @@ export const UPGRADES = [
   {
     id: "pausa",
     name: "Pausa",
-    text: "Os inimigos caem mais devagar.",
+    text: "A queda e o nascimento ficam mais lentos.",
     cost: 20,
     col: 3,
     row: 3,

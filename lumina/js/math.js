@@ -2,7 +2,7 @@
 
 export const DIFFICULTY = {
   stepSeconds: 7,
-  speedGrowth: 1.08,
+  speedGrowth: 1.03,
   intervalShrink: 0.92,
   baseSpeed: 220,
   baseInterval: 0.9,
@@ -317,6 +317,15 @@ export function castKinds(score, opened) {
  */
 export function spawnJitter(random = Math.random) {
   return 0.85 + random() * 0.3;
+}
+
+/**
+ * Seconds until the next wave.
+ * A slower fall waits longer by the same amount, so the gap on screen stays put.
+ */
+export function waveWait(opened, fallScale = 1, intervalScale = 1, random = Math.random) {
+  const fall = Math.max(0.5, fallScale);
+  return waveInterval(opened) * intervalScale * spawnJitter(random) / fall;
 }
 
 /** Sideways offset that still covers a player who stays put. */

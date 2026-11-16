@@ -21,8 +21,8 @@ import {
   laneNudge,
   pairXs,
   castKinds,
-  spawnJitter,
   waveInterval,
+  waveWait,
   staggerDrop,
   variedGap,
   difficultyAt,
@@ -974,7 +974,7 @@ function update(dt) {
         if (state.spawnTimer <= 0) {
           if (state.opened) spawnPair();
           else spawnEnemy();
-          const wait = waveInterval(state.opened) * perk.interval * spawnJitter();
+          const wait = waveWait(state.opened, perk.speed, perk.interval);
           state.spawnTimer = Math.max(state.spawnTimer + wait, wait);
         }
       }
@@ -1032,7 +1032,7 @@ function update(dt) {
       for (let i = state.orbs.length - 1; i >= 0; i -= 1) {
         const orb = state.orbs[i];
         const previousY = orb.y;
-        orb.y += speed * (orb.core ? perk.speed : 1) * dt;
+        orb.y += speed * perk.speed * dt;
         if (!orb.core && magnet > 0) {
           const dx = player.x - orb.x;
           const dy = player.y - orb.y;
