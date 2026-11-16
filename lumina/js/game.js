@@ -19,6 +19,7 @@ import {
   difficultyAt,
   edgeFacing,
   enemyHitsPlayerSweep,
+  enemyStep,
   writeEnemyOutline,
   lerp,
   passScore,
@@ -66,6 +67,38 @@ const TUTORIAL_PAGES = [
   {
     title: "O campo",
     lines: ["Aos 400 a visão abre e caem dois.", "Ficar no canto não esconde."],
+  },
+];
+const CODEX = [
+  {
+    kind: "orb",
+    tint: "rose",
+    title: "Bolha",
+    lines: ["Desce reto.", "O caminho é a própria sombra."],
+  },
+  {
+    kind: "diamond",
+    tint: "violet",
+    title: "Caco",
+    lines: ["Escorrega para o lado.", "Bate na borda e volta."],
+  },
+  {
+    kind: "shard",
+    tint: "teal",
+    title: "Lasca",
+    lines: ["Treme rápido no lugar.", "O desvio é curto e frequente."],
+  },
+  {
+    kind: "lantern",
+    tint: "copper",
+    title: "Vigia",
+    lines: ["Segura a queda.", "A borda acende e ele despenca."],
+  },
+  {
+    kind: "grin",
+    tint: "blue",
+    title: "Riso",
+    lines: ["Abre um S largo.", "Devagar, de um lado ao outro."],
   },
 ];
 const PORTRAIT = 9 / 16;
@@ -118,6 +151,8 @@ const state = {
   tutorialSeen: loadTutorialSeen(),
   tutorialPage: 0,
   tutorialReturn: "menu",
+  codexPage: 0,
+  codexEnemy: null,
   settingsReturn: "menu",
   confirmErase: false,
   dragSlider: null,
@@ -198,6 +233,33 @@ function stepTutorial(direction) {
   state.tutorialPage = next;
   playTap();
   announce(tutorialStatus());
+}
+
+function codexStatus() {
+  const page = CODEX[state.codexPage];
+  return `Codex. ${page.title}. ${page.lines.join(" ")}`;
+}
+
+function openCodex() {
+  state.codexPage = 0;
+  state.codexEnemy = null;
+  state.mode = "codex";
+  announce(codexStatus());
+}
+
+function stepCodexPage(direction) {
+  const next = state.codexPage + direction;
+  if (next < 0 || next >= CODEX.length) {
+    playTap();
+    state.codexEnemy = null;
+    state.mode = "menu";
+    announce(menuLine());
+    return;
+  }
+  state.codexPage = next;
+  state.codexEnemy = null;
+  playTap();
+  announce(codexStatus());
 }
 
 function rememberHint() {
@@ -467,6 +529,8 @@ function placeEnemy(body, x, y) {
     homeX: x,
     phase: Math.random() * Math.PI * 2,
     fall: 0.74 + Math.random() * 0.52,
+    drift: body.kind === "diamond" ? (Math.random() < 0.5 ? -1 : 1) : 1,
+    commit: body.kind === "lantern" ? fieldH() * (0.16 + Math.random() * 0.2) : 0,
   });
 }
 
@@ -616,6 +680,7 @@ function scaleWorld(k) {
     enemy.x *= k;
     enemy.y *= k;
     if (enemy.homeX != null) enemy.homeX *= k;
+    if (enemy.commit) enemy.commit *= k;
   }
   for (const orb of state.orbs) {
     orb.x *= k;
@@ -676,8 +741,9 @@ function tickBloom(dt) {
 }
 
 function update(dt) {
-  if (state.mode === "settings" || state.mode === "tutorial") {
-    if (state.mode === "tutorial") state.time += dt;
+  if (state.mode === "settings" || state.mode === "tutorial" || state.mode === "codex") {
+    if (state.mode === "tutorial" || state.mode === "codex") state.time += dt;
+    if (state.mode === "codex") stepCodex(dt);
     follow("menu", 0.85);
     return;
   }
@@ -735,16 +801,7 @@ function update(dt) {
       for (let i = state.enemies.length - 1; i >= 0; i -= 1) {
         const enemy = state.enemies[i];
         const previousY = enemy.y;
-        if (enemy.homeX != null && (enemy.kind === "shard" || enemy.kind === "grin")) {
-          const amp = enemy.kind === "shard" ? 0.7 : 0.26;
-          const freq = enemy.kind === "shard" ? 2.8 : 1.3;
-          enemy.x = clamp(
-            enemy.homeX + Math.sin(state.time * freq + enemy.phase) * enemy.r * amp,
-            enemy.r,
-            fieldW() - enemy.r,
-          );
-        }
-        enemy.y += speed * perk.speed * (enemy.fall || 1) * dt;
+        enemyStep(enemy, dt, speed * perk.speed, state.time, fieldW());
         if (!state.dying && enemyHitsPlayerSweep(hitProbe, enemy, previousY)) {
           const struck = state.enemies.splice(i, 1)[0];
           hurt(struck);
@@ -908,6 +965,7 @@ function onPointerDown(event) {
     state.mode !== "tree"
     && state.mode !== "settings"
     && state.mode !== "tutorial"
+    && state.mode !== "codex"
     && insideRect(point.x, point.y, settingsRect())
   ) {
     unlock();
@@ -917,6 +975,10 @@ function onPointerDown(event) {
   unlock();
   if (state.mode === "tutorial") {
     onTutorialDown(point.x, point.y);
+    return;
+  }
+  if (state.mode === "codex") {
+    onCodexDown(point.x, point.y);
     return;
   }
   if (state.mode === "settings") {
@@ -930,9 +992,14 @@ function onPointerDown(event) {
     return;
   }
   if (state.mode === "menu") {
-    if (insideRect(point.x, point.y, buttonRect(0.8))) {
+    if (insideRect(point.x, point.y, upgradesRect())) {
       playTap();
       openTree();
+      return;
+    }
+    if (insideRect(point.x, point.y, codexRect())) {
+      playTap();
+      openCodex();
       return;
     }
     playBegin();
@@ -1280,7 +1347,12 @@ function drawEnemy(enemy) {
   const dy = enemy.y - state.player.y;
   const reach = state.player.lightRadius + enemy.r;
   const beam = dx * dx + dy * dy > reach * reach ? 0 : beamOn(enemy);
-  const rim = frameRim + (enemy.kind === "lantern" ? 0.08 * Math.sin(state.time * 2.2 + (enemy.phase || 0)) : 0);
+  const diving = enemy.kind === "lantern" && enemy.commit > 0 && enemy.y >= enemy.commit;
+  const rim = frameRim + (diving
+    ? 0.36
+    : enemy.kind === "lantern"
+      ? 0.08 * Math.sin(state.time * 2.2 + (enemy.phase || 0))
+      : 0);
   traceOutline(points, enemy.x, enemy.y, enemy.r);
   ctx.fillStyle = "#05070f";
   ctx.fill();
@@ -1762,6 +1834,14 @@ function drawTextInLight(text, x, y, size, weight, tracking, lightX, lightY, rad
   ctx.drawImage(lightLayer, 0, 0);
 }
 
+function upgradesRect() {
+  return buttonRect(0.74);
+}
+
+function codexRect() {
+  return buttonRect(0.86);
+}
+
 function drawMenu() {
   const pulse = 1 + Math.sin(state.time * 2.2) * 0.1;
   const x = state.viewW / 2;
@@ -1800,7 +1880,7 @@ function drawMenu() {
     0.45,
   );
 
-  const button = buttonRect(0.8);
+  const button = upgradesRect();
   const sparkY = button.y - Math.max(36, unit() * 0.09);
   const recordY = sparkY - Math.max(28, unit() * 0.07);
   if (!state.hintSeen && recordY - hintY > 64) {
@@ -1821,6 +1901,7 @@ function drawMenu() {
   ctx.restore();
   drawSparkCount(x, sparkY, "center");
   drawPill(button, "Melhorias", "rgba(255, 214, 120, 0.9)");
+  drawPill(codexRect(), "Codex", "rgba(190, 248, 255, 0.75)");
   drawSettingsButton();
 }
 
@@ -2247,6 +2328,106 @@ function onTutorialDown(x, y) {
   else if (insideRect(x, y, buttons.next)) stepTutorial(1);
 }
 
+function codexFrame() {
+  const nav = tutorialNav();
+  const top = Math.max(86, state.safeTop + 78);
+  const w = Math.min(state.viewW - 48, 360);
+  const room = nav.back.y - 120 - top;
+  const h = Math.max(150, Math.min(room, w * 1.05, state.viewH * 0.42));
+  return { x: (state.viewW - w) / 2, y: top, w, h };
+}
+
+function ensureCodexEnemy() {
+  const page = CODEX[state.codexPage];
+  const frame = codexFrame();
+  const enemy = state.codexEnemy;
+  if (enemy && enemy.kind === page.kind) return enemy;
+  const next = {
+    kind: page.kind,
+    tint: page.tint,
+    x: frame.x + frame.w / 2,
+    y: frame.y - frame.h * 0.04,
+    r: Math.min(frame.w, frame.h) * 0.16,
+    homeX: frame.x + frame.w / 2,
+    phase: 0.4,
+    fall: 1,
+    drift: 1,
+    commit: frame.y + frame.h * 0.42,
+  };
+  state.codexEnemy = next;
+  return next;
+}
+
+function stepCodex(dt) {
+  const frame = codexFrame();
+  const enemy = ensureCodexEnemy();
+  enemyStep(enemy, dt, frame.h * 0.28, state.time, frame.x + frame.w, frame.x);
+  if (enemy.y - enemy.r > frame.y + frame.h) {
+    enemy.y = frame.y - enemy.r;
+    if (enemy.kind !== "diamond") enemy.x = enemy.homeX;
+  }
+}
+
+function onCodexDown(x, y) {
+  const buttons = tutorialNav();
+  if (insideRect(x, y, buttons.back)) stepCodexPage(-1);
+  else if (insideRect(x, y, buttons.next)) stepCodexPage(1);
+}
+
+function drawCodex() {
+  const page = CODEX[state.codexPage];
+  const frame = codexFrame();
+  const enemy = ensureCodexEnemy();
+  const x = state.viewW / 2;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "rgba(190, 248, 255, 0.62)";
+  ctx.font = font(Math.max(13, unit() * 0.032), 500);
+  ctx.fillText("Codex", x, Math.max(22, state.safeTop + 16));
+  ctx.fillStyle = "#f4feff";
+  ctx.font = font(Math.max(26, unit() * 0.064), 500);
+  ctx.fillText(page.title, x, frame.y - 30);
+
+  ctx.save();
+  roundRect(frame.x, frame.y, frame.w, frame.h, 22);
+  ctx.clip();
+  const ballX = frame.x + frame.w / 2;
+  const ballY = frame.y + frame.h * 0.78;
+  const core = Math.min(frame.w, frame.h) * 0.05;
+  const light = Math.min(frame.w, frame.h) * 0.34;
+  withPlayer(tutorialStandIn(ballX, ballY, light, core), () => {
+    frameRim = 0.72;
+    drawGlow(ballX, ballY, light, 1);
+    drawEnemy(enemy);
+    drawCore(ballX, ballY, core);
+  });
+  ctx.restore();
+  ctx.save();
+  ctx.strokeStyle = "rgba(186, 214, 228, 0.35)";
+  ctx.lineWidth = 1.5;
+  roundRect(frame.x, frame.y, frame.w, frame.h, 22);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.fillStyle = "rgba(214, 232, 240, 0.88)";
+  ctx.font = font(Math.max(16, unit() * 0.04), 500);
+  page.lines.forEach((line, index) => {
+    ctx.fillText(line, x, frame.y + frame.h + 28 + index * 26);
+  });
+  const dotsY = frame.y + frame.h + 88;
+  for (let i = 0; i < CODEX.length; i += 1) {
+    const dx = x + (i - (CODEX.length - 1) / 2) * 16;
+    ctx.beginPath();
+    ctx.arc(dx, dotsY, i === state.codexPage ? 4.5 : 3, 0, Math.PI * 2);
+    ctx.fillStyle = i === state.codexPage ? "#f4feff" : "rgba(186, 214, 228, 0.35)";
+    ctx.fill();
+  }
+  const buttons = tutorialNav();
+  drawPill(buttons.back, state.codexPage === 0 ? "Voltar" : "Anterior", "rgba(190, 248, 255, 0.55)");
+  const last = state.codexPage === CODEX.length - 1;
+  drawPill(buttons.next, last ? "Fechar" : "Próximo", "rgba(126, 249, 255, 0.95)");
+}
+
 function drawTutorial() {
   const page = TUTORIAL_PAGES[state.tutorialPage];
   const photo = tutorialPhotoRect();
@@ -2299,6 +2480,8 @@ function draw() {
     drawMenu();
   } else if (state.mode === "tutorial") {
     drawTutorial();
+  } else if (state.mode === "codex") {
+    drawCodex();
   } else if (state.mode === "settings") {
     drawSettings();
   } else if (state.mode === "tree") {

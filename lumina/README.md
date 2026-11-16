@@ -6,7 +6,7 @@ Na primeira abertura, quatro cenas mostram o movimento, a luz, os pontos e o cam
 
 Faíscas caem com menos frequência que os inimigos. Pegar uma devolve um pouco da luz e soma uma faísca. As faíscas ficam salvas neste aparelho e compram melhorias, em níveis: Passo 1, 2 e 3 deixam a bolinha seguir o dedo, Luz 1, 2 e 3 aumentam o brilho, Casco 1, 2 e 3 reduzem o dano, Ímã 1, 2 e 3 puxam faíscas. No começo a bolinha responde devagar. Na árvore, o que já foi comprado acende, o que dá para comprar agora tem uma luz fraca, e o resto fica apagado.
 
-No menu, o nome fica fino e quase apagado. A luz da bolinha é que acende as letras. Os inimigos também só mostram o rosto nessa luz: a bolha é sonolenta, o caco é sério, a lasca se assusta e oscila, o vigia observa e o riso sorri.
+No menu, o nome fica fino e quase apagado. A luz da bolinha é que acende as letras. Codex, ao lado de Melhorias, mostra como cada sombra cai: a bolha desce reto, o caco escorrega e volta na borda, a lasca treme, o vigia segura e depois despenca, e o riso abre um S largo. Os rostos só aparecem nessa luz: a bolha é sonolenta, o caco é sério, a lasca se assusta, o vigia observa e o riso sorri.
 
 O som também nasce no aparelho. O fundo troca de acorde a cada poucos segundos, as notas entram e somem, e o grave fica mais fino quando a luz baixa. Faísca, batida e fim de partida têm um efeito curto. Em Ajustes, a música e os efeitos têm um volume cada um. Apagar dados pede confirmação e zera recorde, faíscas e melhorias. Para ouvir cada som fora da partida, abra `samples.html`.
 

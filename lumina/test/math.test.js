@@ -28,6 +28,7 @@ import {
   enemyHitsPlayer,
   enemyHitsPlayerSweep,
   enemyOutline,
+  enemyStep,
   writeEnemyOutline,
   lerp,
   pointInConvexPolygon,
@@ -106,6 +107,34 @@ test("the outline buffer is reused and matches a fresh outline", () => {
   assert.equal(reused[0], point);
   assert.equal(reused.length, 3);
   assert.equal(writeEnemyOutline({ kind: "orb", x: 0, y: 0, r: 8 }, reused), null);
+});
+
+test("each shadow moves in its own way", () => {
+  const orb = { kind: "orb", x: 50, y: 0, r: 10, fall: 1, drift: 1 };
+  enemyStep(orb, 0.5, 100, 0, 200);
+  assert.equal(orb.x, 50);
+  assert.equal(orb.y, 50);
+
+  const shard = { kind: "shard", x: 100, y: 0, r: 20, homeX: 100, phase: 0, fall: 1 };
+  enemyStep(shard, 0.1, 100, Math.PI / 2 / 3.1, 400);
+  assert.ok(Math.abs(shard.x - 118) < 1e-6);
+
+  const grin = { kind: "grin", x: 100, y: 0, r: 20, homeX: 100, phase: 0, fall: 1 };
+  enemyStep(grin, 0.1, 100, Math.PI / 2 / 1.05, 400);
+  assert.ok(Math.abs(grin.x - 131) < 1e-6);
+  assert.ok(Math.abs(grin.x - 100) > Math.abs(shard.x - 100));
+
+  const caco = { kind: "diamond", x: 80, y: 10, r: 10, fall: 1, drift: 1 };
+  enemyStep(caco, 0.5, 100, 0, 100);
+  assert.equal(caco.x, 90);
+  assert.equal(caco.drift, -1);
+
+  const slow = { kind: "lantern", x: 40, y: 0, r: 10, fall: 1, commit: 30 };
+  enemyStep(slow, 1, 10, 0, 200);
+  assert.ok(Math.abs(slow.y - 3.4) < 1e-9);
+  slow.y = 30;
+  enemyStep(slow, 1, 10, 0, 200);
+  assert.ok(Math.abs(slow.y - 47) < 1e-9);
 });
 
 test("enemy hit test uses the core, not the glow", () => {

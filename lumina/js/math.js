@@ -188,6 +188,43 @@ export function enemyHitsPlayerSweep(player, enemy, previousY) {
 }
 
 /**
+ * One step of a shadow. The shape is the tell:
+ * the orb drops straight, the diamond slides and bounces,
+ * the shard shivers, the grin draws a wide S,
+ * and the lantern crawls until `commit`, then dives.
+ * `left` and `width` are the walls. Mutates `enemy`.
+ */
+export function enemyStep(enemy, dt, speed, time, width, left = 0) {
+  const r = Math.max(0, enemy.r);
+  const lo = left + r;
+  const hi = Math.max(lo, width - r);
+  const fall = enemy.fall || 1;
+  let x = enemy.x;
+  let drift = enemy.drift || 1;
+  if (enemy.kind === "shard") {
+    const home = enemy.homeX ?? x;
+    x = clamp(home + Math.sin(time * 3.1 + (enemy.phase || 0)) * r * 0.9, lo, hi);
+  } else if (enemy.kind === "grin") {
+    const home = enemy.homeX ?? x;
+    x = clamp(home + Math.sin(time * 1.05 + (enemy.phase || 0)) * r * 1.55, lo, hi);
+  } else if (enemy.kind === "diamond") {
+    x += speed * 0.62 * fall * drift * dt;
+    if (x <= lo) {
+      x = lo;
+      drift = 1;
+    } else if (x >= hi) {
+      x = hi;
+      drift = -1;
+    }
+  }
+  const rush = enemy.kind === "lantern" && enemy.y >= (enemy.commit ?? Infinity) ? 1.7 : enemy.kind === "lantern" ? 0.34 : 1;
+  enemy.x = x;
+  enemy.y += speed * fall * rush * dt;
+  enemy.drift = drift;
+  return enemy;
+}
+
+/**
  * Each hit removes ~38% of the remaining light.
  * The third hit drops the radius under 25% of the run's starting light and extinguishes it.
  */
