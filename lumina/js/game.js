@@ -814,6 +814,10 @@ function beginBoss() {
   announce("O Manto cobre o topo.");
 }
 
+function bossBirthY() {
+  return bossShape().y;
+}
+
 function startBossPhrase() {
   const boss = state.boss;
   if (!boss || boss.hits >= BOSS_HITS) {
@@ -827,13 +831,10 @@ function startBossPhrase() {
   boss.phrase = bossPhrase(boss.deck[boss.deckIndex]);
   boss.deckIndex += 1;
   boss.phase = "fall";
-  const beats = boss.phrase.beats;
-  const minT = beats.reduce((min, beat) => Math.min(min, beat.t), 0);
-  const step = Math.max(fieldH() * 0.18, unit() * 0.24);
-  const floorY = state.player.y - Math.max(fieldH() * 0.16, unit() * 0.22);
-  for (const beat of beats) {
-    emitBossBeat(beat, floorY - (beat.t - minT) * step);
-  }
+  boss.cursor = 0;
+  boss.dropped = 0;
+  boss.step = Math.max(fieldH() * 0.18, unit() * 0.24);
+  boss.minT = boss.phrase.beats.reduce((min, beat) => Math.min(min, beat.t), 0);
 }
 
 function dismissBoss() {
@@ -861,7 +862,7 @@ function maybeBoss() {
   beginBoss();
 }
 
-function tickBoss(dt) {
+function tickBoss(dt, speed) {
   const boss = state.boss;
   if (!boss) return;
   boss.flash = Math.max(0, boss.flash - dt * 2.2);
@@ -877,7 +878,17 @@ function tickBoss(dt) {
   }
   if (boss.phase === "fall") {
     boss.shown = 1;
-    if (laneQuiet()) {
+    const beats = boss.phrase ? boss.phrase.beats : [];
+    boss.dropped += Math.max(0, speed) * dt;
+    const birth = bossBirthY();
+    while (
+      boss.cursor < beats.length
+      && (beats[boss.cursor].t - boss.minT) * boss.step <= boss.dropped + 0.5
+    ) {
+      emitBossBeat(beats[boss.cursor], birth);
+      boss.cursor += 1;
+    }
+    if (boss.cursor >= beats.length && laneQuiet()) {
       boss.phase = "rest";
       boss.timer = BOSS_BETWEEN;
     }
@@ -957,7 +968,7 @@ function update(dt) {
       state.elapsed += dt;
       state.calm += dt;
       const { speed } = difficultyAt(state.elapsed, state.viewH);
-      if (state.boss) tickBoss(dt);
+      if (state.boss) tickBoss(dt, speed * perk.speed);
       if (!state.boss && state.surgeLeft <= 0) {
         state.spawnTimer -= dt;
         if (state.spawnTimer <= 0) {
