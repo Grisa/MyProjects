@@ -430,15 +430,15 @@ export const BOSS_SCORE = 600;
 export const BOSS_GAP = 300;
 export const BOSS_HITS = 3;
 export const BOSS_ARRIVE = 1.15;
-export const BOSS_BETWEEN = 0.6;
+export const BOSS_BETWEEN = 0.48;
 export const BOSS_LEAVE = 0.7;
-export const BOSS_PHRASES = ["gap", "sweep", "stair", "dive"];
+export const BOSS_PHRASES = ["serpente", "retorno", "zigue", "finta", "quebra", "espiral"];
 
 export function bossThreshold(visit) {
   return BOSS_SCORE + Math.max(0, visit) * BOSS_GAP;
 }
 
-/** Same four phrases, in a new order. Each phrase stays in the deck once. */
+/** Every corridor, in a new order. Each one stays in the deck once. */
 export function shufflePhrases(random = Math.random) {
   const deck = BOSS_PHRASES.slice();
   for (let i = deck.length - 1; i > 0; i -= 1) {
@@ -450,54 +450,46 @@ export function shufflePhrases(random = Math.random) {
   return deck;
 }
 
+const BOSS_LANES = [0.16, 0.39, 0.61, 0.84];
+
+/** Open-lane sequences. The last index is where the light waits. */
+const CORRIDORS = {
+  serpente: [0, 1, 2, 3],
+  retorno: [0, 1, 2, 3, 1, 0],
+  zigue: [0, 3, 1, 2, 0, 3],
+  finta: [1, 1, 1, 0, 3],
+  quebra: [0, 1, 2, 2, 0],
+  espiral: [2, 3, 2, 1, 0, 1],
+};
+
 /**
- * One choreographed phrase. Exactly one beat is the light core.
- * `x` is a fraction of the field width. Beats are in time order.
- * The pocket is chosen when the phrase is dealt, then it stays put.
+ * A corridor of gates. Each row blocks every lane but one.
+ * The lane you just left closes behind you.
+ * The light sits in the last open lane.
+ * `x` is a fraction of the field width. `t` is the row, lowest first.
  */
 export function bossPhrase(id, random = Math.random) {
-  if (id === "sweep") {
-    const slots = [0.18, 0.39, 0.61, 0.82];
-    const pocket = Math.min(slots.length - 1, Math.floor(random() * slots.length));
-    const beats = slots.map((x, index) => (
-      index === pocket
-        ? { t: 0.16, x, role: "core" }
-        : { t: 0, x, role: "shadow", kind: "orb" }
-    ));
-    beats.sort((a, b) => a.t - b.t || a.x - b.x);
-    return { id, beats };
-  }
-  if (id === "stair") {
-    const flip = random() < 0.5;
-    const side = (x) => (flip ? 1 - x : x);
-    return {
-      id,
-      beats: [
-        { t: 0, x: side(0.24), role: "shadow", kind: "orb" },
-        { t: 0.2, x: 0.5, role: "core" },
-        { t: 0.62, x: 0.5, role: "shadow", kind: "orb" },
-        { t: 0.62, x: side(0.76), role: "shadow", kind: "orb" },
-      ],
-    };
-  }
-  if (id === "dive") {
-    const left = random() < 0.5;
-    return {
-      id,
-      beats: [
-        { t: 0, x: left ? 0.28 : 0.72, role: "shadow", kind: "lantern" },
-        { t: 0.4, x: left ? 0.72 : 0.28, role: "core" },
-      ],
-    };
-  }
-  return {
-    id: "gap",
-    beats: [
-      { t: 0, x: 0.3, role: "shadow", kind: "orb" },
-      { t: 0, x: 0.7, role: "shadow", kind: "orb" },
-      { t: 0.18, x: 0.5, role: "core" },
-    ],
-  };
+  const opens = CORRIDORS[id] || CORRIDORS.serpente;
+  const mirror = random() >= 0.5;
+  const lane = (index) => BOSS_LANES[mirror ? BOSS_LANES.length - 1 - index : index];
+  const beats = [];
+  let previous = null;
+  opens.forEach((open, row) => {
+    const last = row === opens.length - 1;
+    for (let index = 0; index < BOSS_LANES.length; index += 1) {
+      if (index === open) {
+        if (last) beats.push({ t: row, x: lane(index), role: "core" });
+        continue;
+      }
+      beats.push({ t: row, x: lane(index), role: "shadow", kind: "orb" });
+    }
+    if (previous != null && previous !== open) {
+      beats.push({ t: row - 0.5, x: lane(previous), role: "shadow", kind: "orb" });
+    }
+    previous = open;
+  });
+  beats.sort((a, b) => a.t - b.t || a.x - b.x);
+  return { id: CORRIDORS[id] ? id : "serpente", beats };
 }
 
 /** Beats that have come due since `cursor`. A late clock releases each beat once. */

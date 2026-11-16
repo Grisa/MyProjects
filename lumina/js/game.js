@@ -117,7 +117,7 @@ const CODEX = [
     kind: "mantle",
     tint: "violet",
     title: "Manto",
-    lines: ["Cobre o topo aos 600.", "A luz no vão acerta. Três vezes."],
+    lines: ["Abre um corredor.", "A luz fica no fim. Três vezes."],
   },
 ];
 const PORTRAIT = 9 / 16;
@@ -827,10 +827,12 @@ function startBossPhrase() {
   boss.phrase = bossPhrase(boss.deck[boss.deckIndex]);
   boss.deckIndex += 1;
   boss.phase = "fall";
-  const shape = bossShape();
-  const lip = shape.y + shape.ry + 18;
-  for (const beat of boss.phrase.beats) {
-    emitBossBeat(beat, lip + (0.7 - beat.t) * fieldH() * 0.38);
+  const beats = boss.phrase.beats;
+  const minT = beats.reduce((min, beat) => Math.min(min, beat.t), 0);
+  const step = Math.max(fieldH() * 0.18, unit() * 0.24);
+  const floorY = state.player.y - Math.max(fieldH() * 0.16, unit() * 0.22);
+  for (const beat of beats) {
+    emitBossBeat(beat, floorY - (beat.t - minT) * step);
   }
 }
 
@@ -903,7 +905,7 @@ function strikeBoss(orb) {
   const player = state.player;
   player.targetLight = Math.min(
     player.initialLight,
-    player.targetLight + player.initialLight * 0.16,
+    player.targetLight + player.initialLight * 0.1,
   );
   popup(orb.x, orb.y, "luz");
   burst(orb.x, orb.y);
@@ -2594,12 +2596,20 @@ function drawMantlePreview(frame) {
   ctx.beginPath();
   ctx.ellipse(mid, top, ry * 0.7, ry * 0.28, 0, 0, Math.PI * 2);
   ctx.fill();
-  const cycle = (state.time % 2.6) / 2.6;
-  const fall = top + ry + cycle * frame.h * 0.58;
-  const r = frame.w * 0.055;
-  drawEnemy({ kind: "orb", tint: "violet", x: mid - frame.w * 0.2, y: fall, r, phase: 0.2 });
-  drawEnemy({ kind: "orb", tint: "violet", x: mid + frame.w * 0.2, y: fall, r, phase: 1.1 });
-  drawBossCore({ x: mid, y: fall, r: r * 0.42 });
+  const shift = (state.time % 3.2) / 3.2;
+  const r = frame.w * 0.04;
+  const lanes = [-0.28, 0, 0.28];
+  const opens = [0, 1, 2];
+  for (let row = 0; row < opens.length; row += 1) {
+    const y = frame.y + frame.h * (0.7 - row * 0.18) + shift * frame.h * 0.02;
+    for (let lane = 0; lane < lanes.length; lane += 1) {
+      const x = mid + frame.w * lanes[lane];
+      if (lane === opens[row] && row === opens.length - 1) drawBossCore({ x, y, r: r * 0.62 });
+      else if (lane !== opens[row]) {
+        drawEnemy({ kind: "orb", tint: "violet", x, y, r, phase: row + lane });
+      }
+    }
+  }
 }
 
 function ensureCodexEnemy() {
@@ -2664,10 +2674,11 @@ function drawCodex() {
   ctx.save();
   roundRect(frame.x, frame.y, frame.w, frame.h, 22);
   ctx.clip();
-  const ballX = frame.x + frame.w / 2;
-  const ballY = frame.y + frame.h * 0.78;
+  const mantle = page.kind === "mantle";
+  const ballX = mantle ? frame.x + frame.w * 0.22 : frame.x + frame.w / 2;
+  const ballY = frame.y + frame.h * (mantle ? 0.88 : 0.78);
   const core = Math.min(frame.w, frame.h) * 0.05;
-  const light = Math.min(frame.w, frame.h) * 0.34;
+  const light = Math.min(frame.w, frame.h) * (mantle ? 0.16 : 0.34);
   withPlayer(tutorialStandIn(ballX, ballY, light, core), () => {
     frameRim = 0.72;
     drawGlow(ballX, ballY, light, 1);
@@ -2770,12 +2781,12 @@ function draw() {
     if (state.mode === "play" || state.mode === "paused") {
       ctx.lineJoin = "round";
       ctx.lineCap = "round";
-      if (state.boss) drawBoss();
       for (const enemy of state.enemies) drawEnemy(enemy);
       for (const orb of state.orbs) {
         if (orb.core) drawBossCore(orb);
         else drawSparkGlyph(orb.x, orb.y, orb.r);
       }
+      if (state.boss) drawBoss();
     }
     drawParticles();
     for (const floater of state.floaters) {
