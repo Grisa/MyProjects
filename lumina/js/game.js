@@ -13,6 +13,9 @@ import {
   BOSS_LEAVE,
   bossPhrase,
   bossThreshold,
+  bossWallCenters,
+  noteBossLight,
+  scoreForPass,
   shufflePhrases,
   aimPair,
   edgeCamp,
@@ -690,7 +693,7 @@ function collectSpark(orb) {
   const perk = perks();
   const gained = perk.sparkValue;
   state.sparks += gained;
-  if (perk.sparkScore) {
+  if (perk.sparkScore && !state.boss) {
     state.score += perk.sparkScore;
     noteAct();
   }
@@ -861,6 +864,9 @@ function beginBoss() {
     phrase: null,
     deck: shufflePhrases(),
     deckIndex: 0,
+    missed: 0,
+    wallSeq: 0,
+    wallHit: 0,
   };
   playBoss();
   announce("O Manto cobre o topo.");
@@ -960,9 +966,41 @@ function tickBoss(dt, speed) {
   if (boss.timer <= 0) finishBoss();
 }
 
+function shadowRadius() {
+  return clamp(state.viewH * 0.042, 18, fieldW() * 0.09);
+}
+
+/** A full line under the mantle. The first touch hurts once. */
+function closeBossField() {
+  const boss = state.boss;
+  if (!boss || boss.phase === "leave") return;
+  const r = shadowRadius();
+  const y = bossBirthY();
+  const id = boss.wallSeq + 1;
+  boss.wallSeq = id;
+  for (const x of bossWallCenters(fieldW(), r)) {
+    placeEnemy({ kind: "orb", tint: "violet", r }, x, y);
+    const enemy = state.enemies[state.enemies.length - 1];
+    enemy.fall = 1;
+    enemy.homeX = x;
+    enemy.wall = id;
+    enemy.points = 0;
+  }
+  announce("O Manto fecha o campo.");
+}
+
+function resolveBossLight(caught) {
+  const boss = state.boss;
+  if (!boss || boss.phase === "leave") return;
+  const next = noteBossLight(boss.missed, caught);
+  boss.missed = next.missed;
+  if (next.close) closeBossField();
+}
+
 function strikeBoss(orb) {
   const boss = state.boss;
   if (!boss || boss.phase === "leave") return;
+  resolveBossLight(true);
   boss.hits += 1;
   boss.flash = 1;
   const player = state.player;
@@ -1052,13 +1090,16 @@ function update(dt) {
         const enemy = state.enemies[i];
         const previousY = enemy.y;
         enemyStep(enemy, dt, speed, state.time, fieldW());
-        if (!state.dying && enemyHitsPlayerSweep(hitProbe, enemy, previousY)) {
+        const wallAlreadyHit = enemy.wall && state.boss && state.boss.wallHit === enemy.wall;
+        if (!state.dying && !wallAlreadyHit && enemyHitsPlayerSweep(hitProbe, enemy, previousY)) {
+          if (enemy.wall && state.boss) state.boss.wallHit = enemy.wall;
           const struck = state.enemies.splice(i, 1)[0];
           hurt(struck);
           continue;
         }
         if (
           enemy.points == null
+          && !state.boss
           && previousY < player.y
           && enemy.y >= player.y
         ) {
@@ -1071,14 +1112,14 @@ function update(dt) {
         if (enemy.y - enemy.r > fieldH()) {
           state.enemies.splice(i, 1);
           if (!state.dying) {
-            const gained = enemy.points ?? 1;
-            state.score += gained;
-            const crossed = noteAct();
-            if (!crossed && (!state.boss || state.boss.phase !== "arrive")) {
-              announce(`Pontos ${state.score}`);
+            const gained = scoreForPass(enemy.points ?? 1, Boolean(state.boss));
+            if (gained > 0) {
+              state.score += gained;
+              const crossed = noteAct();
+              if (!crossed) announce(`Pontos ${state.score}`);
+              if (gained === 1) playPass();
+              maybeBloom();
             }
-            if (gained === 1) playPass();
-            maybeBloom();
           }
         }
       }
@@ -1109,7 +1150,10 @@ function update(dt) {
           else collectSpark(taken);
           continue;
         }
-        if (orb.y - orb.r > fieldH()) state.orbs.splice(i, 1);
+        if (orb.y - orb.r > fieldH()) {
+          const lost = state.orbs.splice(i, 1)[0];
+          if (lost.core) resolveBossLight(false);
+        }
       }
       maybeBoss();
     }

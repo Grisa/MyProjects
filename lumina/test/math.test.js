@@ -18,6 +18,9 @@ import {
   BOSS_SCORE,
   bossPhrase,
   bossThreshold,
+  bossWallCenters,
+  noteBossLight,
+  scoreForPass,
   dueBeats,
   shufflePhrases,
   aimPair,
@@ -308,6 +311,27 @@ test("camping a corner pulls the next enemy onto that side", () => {
   const right = edgeSlots(590, 600, 30, 180, 1);
   assert.ok(right[0] > 560);
   assert.ok(right[1] < right[0] - 100);
+});
+
+test("the mantle scores nothing, and two missed lights close the field", () => {
+  assert.equal(scoreForPass(1, true), 0);
+  assert.equal(scoreForPass(2, true), 0);
+  assert.equal(scoreForPass(2, false), 2);
+
+  assert.deepEqual(noteBossLight(0, false), { missed: 1, close: false });
+  assert.deepEqual(noteBossLight(1, true), { missed: 0, close: false });
+  assert.deepEqual(noteBossLight(1, false), { missed: 0, close: true });
+
+  const width = 390;
+  const radius = 22;
+  const core = 12;
+  const centers = bossWallCenters(width, radius);
+  assert.ok(centers[0] <= radius);
+  assert.ok(centers.at(-1) >= width - radius);
+  for (const x of [0, core, width * 0.08, width / 2, width - core, width]) {
+    const covered = centers.some((center) => Math.abs(center - x) <= radius + core);
+    assert.equal(covered, true);
+  }
 });
 
 test("the mantle waits at 600 and returns 300 points later", () => {

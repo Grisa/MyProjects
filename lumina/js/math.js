@@ -514,6 +514,42 @@ export function bossThreshold(visit) {
   return BOSS_SCORE + Math.max(0, visit) * BOSS_GAP;
 }
 
+/** A pass scores nothing while the mantle owns the field. */
+export function scoreForPass(gained, bossUp) {
+  if (bossUp) return 0;
+  return gained;
+}
+
+/**
+ * The lights that hit the mantle. Two misses in a row close the field.
+ * Catching one clears the count.
+ */
+export function noteBossLight(missed, caught) {
+  if (caught) return { missed: 0, close: false };
+  const next = Math.max(0, missed) + 1;
+  if (next >= 2) return { missed: 0, close: true };
+  return { missed: next, close: false };
+}
+
+/**
+ * Centers of one solid line. Circles of `radius` cover the field edge to edge,
+ * so a sideways dodge has nowhere to stand.
+ */
+export function bossWallCenters(width, radius) {
+  const r = Math.max(1, radius);
+  const span = Math.max(r * 2, width);
+  const step = r * 1.8;
+  const last = span - r;
+  const centers = [];
+  let x = r;
+  while (x < last - 0.01) {
+    centers.push(x);
+    x += step;
+  }
+  centers.push(last);
+  return centers;
+}
+
 /** Every corridor, in a new order. Each one stays in the deck once. */
 export function shufflePhrases(random = Math.random) {
   const deck = BOSS_PHRASES.slice();
