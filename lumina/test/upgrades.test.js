@@ -110,3 +110,11 @@ test("tiers get stronger and more expensive", () => {
   assert.equal(nodeState(upgradeById("vesper"), new Set(["centelha", "halo", "aurora"])), "locked");
   assert.equal(nodeState(upgradeById("vesper"), new Set(["farol"])), "available");
 });
+
+test("the whole tree costs more than a handful of runs", () => {
+  const sum = UPGRADES.reduce((total, upgrade) => total + upgrade.cost, 0);
+  assert.equal(upgradeById("centelha").cost, 20);
+  assert.equal(sum, 3420);
+  assert.ok(upgradeById("brasa").cost > upgradeById("vortice").cost);
+  assert.ok(upgradeById("abundancia").cost > upgradeById("ima").cost * 2);
+});
