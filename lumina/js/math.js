@@ -30,9 +30,9 @@ export const LANTERN_DIVE = 1.25;
 
 export const ACT_LINES = [
   null,
-  { title: "Ato 2", detail: "A lasca e o riso entram." },
-  { title: "Ato 3", detail: "A luz abre o campo." },
-  { title: "Sem fim", detail: "" },
+  { title: "Act 2", detail: "Splinters and grins arrive." },
+  { title: "Act 3", detail: "The light opens the field." },
+  { title: "Endless", detail: "The dark does not stop." },
 ];
 
 export const BLOOM_SCORE = 400;

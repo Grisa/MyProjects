@@ -1,7 +1,7 @@
 {
   "name": "Lumina",
   "short_name": "Lumina",
-  "description": "Desvie da escuridão e mantenha a luz acesa.",
+  "description": "Keep your light alive.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

@@ -74,59 +74,59 @@ const HINT_KEY = "lumina-hint";
 const TUTORIAL_KEY = "lumina-tutorial";
 const TUTORIAL_PAGES = [
   {
-    title: "Arraste",
-    lines: ["A bolinha fica embaixo.", "O dedo só a leva para os lados."],
+    title: "Drag",
+    lines: ["The light stays at the bottom.", "Your finger slides it sideways."],
   },
   {
-    title: "Desvie",
-    lines: ["As sombras caem no escuro.", "Um toque apaga um pedaço da luz."],
+    title: "Dodge",
+    lines: ["Shadows fall through the dark.", "A touch takes part of the light."],
   },
   {
-    title: "Pontos",
-    lines: ["Passar soma 1. Rente soma 2.", "A faísca devolve luz."],
+    title: "Score",
+    lines: ["A pass is 1. A close graze is 2.", "Sparks give light back."],
   },
   {
-    title: "O campo",
-    lines: ["Aos 400 a visão abre e caem dois.", "Ficar no canto não esconde."],
+    title: "The field",
+    lines: ["At 400 the view opens. Two fall.", "The corner will not hide you."],
   },
 ];
-const BOSS_HIT_LINES = ["Uma luz.", "Duas luzes."];
+const BOSS_HIT_LINES = ["First light.", "Second light."];
 const CODEX = [
   {
     kind: "orb",
     tint: "rose",
-    title: "Bolha",
-    lines: ["Desce reto.", "O caminho é a própria sombra."],
+    title: "Bubble",
+    lines: ["Falls straight down.", "The shadow is the whole path."],
   },
   {
     kind: "diamond",
     tint: "violet",
-    title: "Caco",
-    lines: ["Escorrega para o lado.", "Bate na borda e volta."],
+    title: "Shard",
+    lines: ["Slides toward the wall.", "It hits the edge and returns."],
   },
   {
     kind: "shard",
     tint: "teal",
-    title: "Lasca",
-    lines: ["Treme rápido no lugar.", "O desvio é curto e frequente."],
+    title: "Splinter",
+    lines: ["Shivers in place.", "The dodge is short and constant."],
   },
   {
     kind: "lantern",
     tint: "copper",
-    title: "Vigia",
-    lines: ["Segura a queda.", "A borda acende e ele despenca."],
+    title: "Watcher",
+    lines: ["Holds, then the rim lights.", "After that, it drops."],
   },
   {
     kind: "grin",
     tint: "blue",
-    title: "Riso",
-    lines: ["Abre um S largo.", "Devagar, de um lado ao outro."],
+    title: "Grin",
+    lines: ["Sweeps a wide S.", "Slow, from side to side."],
   },
   {
     kind: "mantle",
     tint: "violet",
-    title: "Manto",
-    lines: ["Abre um corredor.", "A luz fica no fim. Três vezes."],
+    title: "Mantle",
+    lines: ["Opens one corridor.", "The light waits at the end. Three times."],
   },
 ];
 const PORTRAIT = 9 / 16;
@@ -185,6 +185,7 @@ const state = {
   guardUsed: false,
   shielded: false,
   shieldSparks: 0,
+  newBest: false,
   hintSeen: loadHintSeen(),
   tutorialSeen: loadTutorialSeen(),
   tutorialPage: 0,
@@ -249,7 +250,7 @@ function markTutorialSeen() {
 
 function tutorialStatus() {
   const page = TUTORIAL_PAGES[state.tutorialPage];
-  return `Como jogar. ${page.title}. ${page.lines.join(" ")}`;
+  return `How to play. ${page.title}. ${page.lines.join(" ")}`;
 }
 
 function openTutorial(backTo) {
@@ -262,9 +263,9 @@ function openTutorial(backTo) {
 function closeTutorial() {
   markTutorialSeen();
   state.mode = state.tutorialReturn || "menu";
-  if (state.mode === "settings") announce("Ajustes.");
-  else if (state.mode === "paused") announce("Pausado. Toque para continuar.");
-  else if (state.mode === "over") announce(`Fim de jogo. Pontos ${state.score}. Recorde ${state.highScore}.`);
+  if (state.mode === "settings") announce("Settings.");
+  else if (state.mode === "paused") announce("Paused. Tap to continue.");
+  else if (state.mode === "over") announce(overLine());
   else announce(menuLine());
 }
 
@@ -318,9 +319,14 @@ function rememberHint() {
 }
 
 function menuLine() {
-  const record = state.highScore > 0 ? ` Recorde ${state.highScore}.` : "";
-  const hint = state.hintSeen ? "" : " A luz também é a vida.";
-  return `Jogar.${record}${hint}`;
+  const record = state.highScore > 0 ? ` Best ${state.highScore}.` : "";
+  const hint = state.hintSeen ? "" : " Your light is your life.";
+  return `Play.${record}${hint}`;
+}
+
+function overLine() {
+  const best = state.newBest ? "New best." : `Best ${state.highScore}.`;
+  return `Game over. Score ${state.score}. ${best}`;
 }
 
 function loadHighScore() {
@@ -553,16 +559,17 @@ function resetRun(pointerX) {
   state.guardUsed = false;
   state.shielded = false;
   state.shieldSparks = 0;
+  state.newBest = false;
   state.mode = "play";
   rememberHint();
-  announce("Pontos 0");
+  announce("Score 0");
 }
 
 function pauseRun() {
   if (state.mode !== "play") return;
   state.mode = "paused";
   state.pointerId = null;
-  announce("Pausado. Toque para continuar.");
+  announce("Paused. Tap to continue.");
 }
 
 function resumeRun(pointerX) {
@@ -570,15 +577,17 @@ function resumeRun(pointerX) {
   state.mode = "play";
   state.last = performance.now();
   if (Number.isFinite(pointerX)) aim(pointerX);
-  announce(`Pontos ${state.score}`);
+  announce(`Score ${state.score}`);
 }
 
 function endRun() {
+  const beaten = state.score > state.highScore && state.score > 0;
   saveHighScore(state.score);
+  state.newBest = beaten;
   state.mode = "over";
   state.dying = false;
   state.pointerId = null;
-  announce(`Fim de jogo. Pontos ${state.score}. Recorde ${state.highScore}.`);
+  announce(overLine());
   playDeath();
   noteDeath();
 }
@@ -714,7 +723,7 @@ function collectSpark(orb) {
   const shield = noteShieldSpark(state.shieldSparks, state.shielded, perk.shieldEvery);
   state.shieldSparks = shield.count;
   state.shielded = shield.shielded;
-  popup(orb.x, orb.y, shield.gained ? "escudo" : `+${gained}`);
+  popup(orb.x, orb.y, shield.gained ? "shield" : `+${gained}`);
   if (orb.nova) burstNova(orb.x, orb.y);
   playSpark();
 }
@@ -764,7 +773,7 @@ function hurt(enemy) {
     state.shielded = false;
     state.shake = 0.45;
     burst(hit.x, hit.y);
-    popup(player.x, player.y - unit() * 0.06, "escudo");
+    popup(player.x, player.y - unit() * 0.06, "shield");
     playGuard();
     return;
   }
@@ -901,7 +910,7 @@ function beginBoss() {
     wallHit: 0,
   };
   playBoss();
-  announce("O Manto cobre o topo.");
+  announce("The Mantle covers the top.");
 }
 
 function bossBirthY() {
@@ -937,7 +946,7 @@ function dismissBoss() {
   burst(shape.x, shape.y + shape.ry * 0.4);
   state.shake = 0.55;
   playBossEnd();
-  announce("O Manto se abre.");
+  announce("The Mantle opens.");
 }
 
 function finishBoss() {
@@ -1018,7 +1027,7 @@ function closeBossField() {
     enemy.wall = id;
     enemy.points = 0;
   }
-  announce("O Manto fecha o campo.");
+  announce("The Mantle closes the field.");
 }
 
 function resolveBossLight(caught) {
@@ -1040,7 +1049,7 @@ function strikeBoss(orb) {
     player.initialLight,
     player.targetLight + player.initialLight * 0.1,
   );
-  popup(orb.x, orb.y, "luz");
+  popup(orb.x, orb.y, "light");
   burst(orb.x, orb.y);
   playBossHit();
   if (boss.hits >= BOSS_HITS) dismissBoss();
@@ -1148,7 +1157,7 @@ function update(dt) {
             if (gained > 0) {
               state.score += gained;
               const crossed = noteAct();
-              if (!crossed) announce(`Pontos ${state.score}`);
+              if (!crossed) announce(`Score ${state.score}`);
               if (gained === 1) playPass();
               maybeBloom();
             }
@@ -1277,15 +1286,15 @@ function openSettings() {
   state.dragSlider = null;
   state.mode = "settings";
   playTap();
-  announce("Ajustes.");
+  announce("Settings.");
 }
 
 function closeSettings() {
   state.confirmErase = false;
   state.dragSlider = null;
   state.mode = state.settingsReturn || "menu";
-  if (state.mode === "paused") announce("Pausado. Toque para continuar.");
-  else if (state.mode === "over") announce(`Fim de jogo. Pontos ${state.score}. Recorde ${state.highScore}.`);
+  if (state.mode === "paused") announce("Paused. Tap to continue.");
+  else if (state.mode === "over") announce(overLine());
   else announce(menuLine());
 }
 
@@ -1342,13 +1351,14 @@ function onPointerDown(event) {
     return;
   }
   if (state.mode === "over") {
-    if (insideRect(point.x, point.y, buttonRect(0.58))) {
+    const stack = overStack();
+    if (insideRect(point.x, point.y, stack.again)) {
       playBegin();
       resetRun(point.x);
       capturePointer(event);
       return;
     }
-    if (insideRect(point.x, point.y, buttonRect(0.7))) {
+    if (insideRect(point.x, point.y, stack.upgrades)) {
       playTap();
       openTree();
     }
@@ -1406,7 +1416,7 @@ function onPointerUp(event) {
 function openTree() {
   state.mode = "tree";
   state.gesture = null;
-  announce(`Melhorias. ${state.sparks} faíscas.`);
+  announce(`Upgrades. ${state.sparks} sparks.`);
 }
 
 function tryBuy(id) {
@@ -1417,7 +1427,7 @@ function tryBuy(id) {
   invalidatePerks();
   saveProgress();
   playBuy();
-  announce(`${upgrade.name} comprado. ${state.sparks} faíscas.`);
+  announce(`${upgrade.name} bought. ${state.sparks} sparks.`);
 }
 
 canvas.addEventListener("pointerdown", onPointerDown);
@@ -2172,9 +2182,9 @@ function drawTree() {
   ctx.font = font(Math.max(22, unit() * 0.055), 500);
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("Melhorias", state.viewW / 2, backRect().y + 18);
+  ctx.fillText("Upgrades", state.viewW / 2, backRect().y + 18);
   drawSparkCount(state.viewW - 28, backRect().y + 18, "right");
-  drawPill(backRect(), "Voltar", "rgba(190, 248, 255, 0.7)");
+  drawPill(backRect(), "Back", "rgba(190, 248, 255, 0.7)");
 
   ctx.save();
   ctx.beginPath();
@@ -2244,12 +2254,12 @@ function drawTree() {
   const buy = buyRect();
   const affordable = canBuy(selected, state.owned, state.sparks);
   const label = status === "owned"
-    ? "Comprado"
+    ? "Owned"
     : status === "locked"
-      ? "Bloqueado"
+      ? "Locked"
       : affordable
-        ? `Comprar · ${selected.cost}`
-        : `Precisa de ${selected.cost}`;
+        ? `Buy · ${selected.cost}`
+        : `Need ${selected.cost}`;
   const accent = status === "owned"
     ? "rgba(186, 244, 255, 0.95)"
     : affordable
@@ -2319,6 +2329,17 @@ function menuStack() {
   const upgrades = { x, y: codex.y - gap - h, w, h };
   const play = { x, y: upgrades.y - gap - h, w, h };
   return { play, upgrades, codex };
+}
+
+function overStack() {
+  const h = Math.max(52, unit() * 0.09);
+  const w = Math.min(state.viewW * 0.74, 320);
+  const gap = 14;
+  const x = (state.viewW - w) / 2;
+  const bottom = state.viewH - Math.max(28, state.viewH * 0.05);
+  const upgrades = { x, y: bottom - h, w, h };
+  const again = { x, y: upgrades.y - gap - h, w, h };
+  return { again, upgrades };
 }
 
 function playRect() {
@@ -2416,7 +2437,7 @@ function drawMenu() {
   ctx.textBaseline = "middle";
   ctx.fillStyle = "rgba(210, 226, 236, 0.78)";
   ctx.font = font(Math.max(14, unit() * 0.036), 500);
-  ctx.fillText(state.highScore > 0 ? `Recorde ${state.highScore}` : "Recorde 0", x, recordY);
+  ctx.fillText(state.highScore > 0 ? `Best ${state.highScore}` : "Best 0", x, recordY);
   ctx.restore();
   drawSparkCount(x, sparkY, "center");
   if (!state.hintSeen && play.y - sparkY > 46) {
@@ -2425,12 +2446,12 @@ function drawMenu() {
     ctx.textBaseline = "middle";
     ctx.fillStyle = "rgba(214, 232, 240, 0.82)";
     ctx.font = font(Math.max(15, unit() * 0.038), 500);
-    ctx.fillText("A luz também é a vida", x, sparkY + (play.y - sparkY) * 0.55);
+    ctx.fillText("Your light is your life", x, sparkY + (play.y - sparkY) * 0.55);
     ctx.restore();
   }
 
-  drawLightButton(play, "Jogar");
-  drawPill(upgrades, "Melhorias", "rgba(255, 214, 120, 0.9)");
+  drawLightButton(play, "Play");
+  drawPill(upgrades, "Upgrades", "rgba(255, 214, 120, 0.9)");
   drawPill(codex, "Codex", "rgba(190, 248, 255, 0.75)");
   drawSettingsButton();
 }
@@ -2448,42 +2469,67 @@ function roundRect(x, y, w, h, radius) {
 
 function drawGameOver() {
   const x = state.viewW / 2;
-  ctx.fillStyle = "rgba(5, 6, 15, 0.72)";
+  const veil = ctx.createRadialGradient(x, state.viewH * 0.28, unit() * 0.04, x, state.viewH * 0.36, unit() * 0.78);
+  veil.addColorStop(0, "rgba(8, 18, 32, 0.28)");
+  veil.addColorStop(0.42, "rgba(4, 6, 14, 0.7)");
+  veil.addColorStop(1, "rgba(2, 3, 8, 0.9)");
+  ctx.fillStyle = veil;
   ctx.fillRect(0, 0, state.viewW, state.viewH);
 
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = "rgba(255, 255, 255, 0.66)";
-  ctx.font = font(Math.max(16, unit() * 0.04), 500);
-  ctx.fillText("A luz se apagou", x, state.viewH * 0.3);
+  const titleSize = Math.max(22, Math.min(30, unit() * 0.064));
+  const titleY = state.viewH * 0.2;
+  const y = titleY + titleSize * 0.95;
+  const pulse = 0.92 + Math.sin(state.time * 1.15) * 0.08;
+  const radius = unit() * 0.2 * pulse;
 
-  ctx.fillStyle = "#f4feff";
-  ctx.font = font(Math.max(64, unit() * 0.18), 600);
-  ctx.fillText(String(state.score), x, state.viewH * 0.42);
-
-  ctx.fillStyle = "rgba(190, 248, 255, 0.84)";
-  ctx.font = font(Math.max(16, unit() * 0.042), 500);
-  ctx.fillText(`Recorde ${state.highScore}`, x, state.viewH * 0.5);
-  drawSparkCount(x - 8, state.viewH * 0.545, "right");
-
-  const button = buttonRect(0.58);
+  drawGlow(x, y, radius * 1.35, 0.34);
+  drawGlow(x, y, radius * 0.62, 0.7);
   ctx.save();
-  ctx.strokeStyle = "rgba(126, 249, 255, 0.95)";
-  ctx.lineWidth = 1.5;
-  ctx.shadowColor = "rgba(126, 249, 255, 0.55)";
-  ctx.shadowBlur = 14;
-  roundRect(button.x, button.y, button.w, button.h, button.h / 2);
+  ctx.globalAlpha = 0.55;
+  drawLightRays(x, y, radius * 0.7);
+  ctx.restore();
+  drawTextInLight(
+    "THE LIGHT WENT OUT",
+    x,
+    titleY,
+    titleSize,
+    100,
+    Math.round(titleSize * 0.045),
+    x,
+    y,
+    radius * 1.2,
+    0.28,
+  );
+  ctx.save();
+  ctx.strokeStyle = "rgba(214, 252, 255, 0.32)";
+  ctx.lineWidth = 1.15;
+  ctx.beginPath();
+  ctx.arc(x, y, radius * 0.34 + Math.sin(state.time * 1.7) * 1.1, 0, Math.PI * 2);
   ctx.stroke();
   ctx.restore();
-  ctx.fillStyle = "#e9fdff";
-  ctx.font = font(Math.max(16, unit() * 0.04), 600);
-  ctx.fillText("Jogar novamente", x, button.y + button.h / 2);
-  drawPill(buttonRect(0.7), "Melhorias", "rgba(255, 214, 120, 0.9)");
+  drawCore(x, y, Math.max(3.2, unit() * 0.011));
+
+  const scoreY = y + radius * 0.72 + Math.max(42, unit() * 0.09);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#f7feff";
+  ctx.font = font(Math.max(56, unit() * 0.15), 100);
+  ctx.fillText(String(state.score), x, scoreY);
+
+  const recordY = scoreY + Math.max(34, unit() * 0.075);
+  ctx.fillStyle = state.newBest ? "rgba(255, 228, 170, 0.95)" : "rgba(210, 226, 236, 0.8)";
+  ctx.font = font(Math.max(15, unit() * 0.038), 500);
+  ctx.fillText(state.newBest ? "New best" : `Best ${state.highScore}`, x, recordY);
+  drawSparkCount(x, recordY + Math.max(28, unit() * 0.062), "center");
+
+  const stack = overStack();
+  drawLightButton(stack.again, "Play again");
+  drawPill(stack.upgrades, "Upgrades", "rgba(255, 214, 120, 0.9)");
   drawSettingsButton();
 }
 
 function drawSettingsButton() {
-  drawPill(settingsRect(), "Ajustes", "rgba(190, 248, 255, 0.7)", state.mode !== "play" && state.mode !== "paused");
+  drawPill(settingsRect(), "Settings", "rgba(190, 248, 255, 0.7)", state.mode !== "play" && state.mode !== "paused");
 }
 
 function sliderTrack(which) {
@@ -2529,6 +2575,7 @@ function eraseProgress() {
   state.owned = new Set();
   invalidatePerks();
   state.highScore = 0;
+  state.newBest = false;
   state.hintSeen = false;
   state.tutorialSeen = false;
   state.selectedId = "centelha";
@@ -2542,7 +2589,7 @@ function eraseProgress() {
     /* The memory copy is already empty. */
   }
   state.confirmErase = false;
-  announce("Dados apagados.");
+  announce("Progress erased.");
 }
 
 function onSettingsDown(x, y) {
@@ -2569,7 +2616,7 @@ function onSettingsDown(x, y) {
   if (insideRect(x, y, eraseRect())) {
     state.confirmErase = true;
     playTap();
-    announce("Confirmar para apagar os dados.");
+    announce("Confirm to erase your progress.");
     return;
   }
   if (insideRect(x, y, sliderTrack("music"))) {
@@ -2628,14 +2675,14 @@ function drawConfirmErase() {
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#f4feff";
   ctx.font = font(Math.max(20, unit() * 0.05), 600);
-  ctx.fillText("Apagar tudo?", state.viewW / 2, card.y + 46);
+  ctx.fillText("Erase everything?", state.viewW / 2, card.y + 46);
   ctx.fillStyle = "rgba(210, 226, 236, 0.82)";
   ctx.font = font(Math.max(14, unit() * 0.034), 500);
-  ctx.fillText("Recorde, faíscas e melhorias", state.viewW / 2, card.y + 90);
-  ctx.fillText("somem deste aparelho.", state.viewW / 2, card.y + 114);
+  ctx.fillText("Best score, sparks, and upgrades", state.viewW / 2, card.y + 90);
+  ctx.fillText("are erased from this device.", state.viewW / 2, card.y + 114);
   const buttons = confirmButtons();
-  drawPill(buttons.erase, "Apagar", "rgba(255, 96, 110, 0.9)");
-  drawPill(buttons.cancel, "Cancelar", "rgba(190, 248, 255, 0.75)");
+  drawPill(buttons.erase, "Erase", "rgba(255, 96, 110, 0.9)");
+  drawPill(buttons.cancel, "Cancel", "rgba(190, 248, 255, 0.75)");
 }
 
 function drawSettings() {
@@ -2643,17 +2690,17 @@ function drawSettings() {
   ctx.font = font(Math.max(22, unit() * 0.055), 500);
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("Ajustes", state.viewW / 2, backRect().y + 18);
-  drawPill(backRect(), "Voltar", "rgba(190, 248, 255, 0.7)");
-  drawSlider("music", "Música");
-  drawSlider("sfx", "Efeitos");
-  drawPill(tutorialButtonRect(), "Como jogar", "rgba(190, 248, 255, 0.85)");
+  ctx.fillText("Settings", state.viewW / 2, backRect().y + 18);
+  drawPill(backRect(), "Back", "rgba(190, 248, 255, 0.7)");
+  drawSlider("music", "Music");
+  drawSlider("sfx", "Effects");
+  drawPill(tutorialButtonRect(), "How to play", "rgba(190, 248, 255, 0.85)");
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = "rgba(210, 226, 236, 0.55)";
   ctx.font = font(Math.max(13, unit() * 0.032), 500);
-  ctx.fillText("Apaga recorde, faíscas e melhorias.", state.viewW / 2, eraseRect().y - 26);
-  drawPill(eraseRect(), "Apagar dados", "rgba(255, 120, 130, 0.5)");
+  ctx.fillText("Erases best score, sparks, and upgrades.", state.viewW / 2, eraseRect().y - 26);
+  drawPill(eraseRect(), "Erase data", "rgba(255, 120, 130, 0.5)");
   if (state.confirmErase) drawConfirmErase();
 }
 
@@ -2997,9 +3044,9 @@ function drawCodex() {
     ctx.fill();
   }
   const buttons = tutorialNav();
-  drawPill(buttons.back, state.codexPage === 0 ? "Voltar" : "Anterior", "rgba(190, 248, 255, 0.55)");
+  drawPill(buttons.back, state.codexPage === 0 ? "Back" : "Previous", "rgba(190, 248, 255, 0.55)");
   const last = state.codexPage === CODEX.length - 1;
-  drawPill(buttons.next, last ? "Fechar" : "Próximo", "rgba(126, 249, 255, 0.95)");
+  drawPill(buttons.next, last ? "Close" : "Next", "rgba(126, 249, 255, 0.95)");
 }
 
 function drawTutorial() {
@@ -3010,7 +3057,7 @@ function drawTutorial() {
   ctx.textBaseline = "middle";
   ctx.fillStyle = "rgba(190, 248, 255, 0.62)";
   ctx.font = font(Math.max(13, unit() * 0.032), 500);
-  ctx.fillText("Como jogar", x, Math.max(22, state.safeTop + 16));
+  ctx.fillText("How to play", x, Math.max(22, state.safeTop + 16));
   ctx.fillStyle = "#f4feff";
   ctx.font = font(Math.max(26, unit() * 0.064), 500);
   ctx.fillText(page.title, x, photo.y - 30);
@@ -3029,10 +3076,10 @@ function drawTutorial() {
     ctx.fill();
   }
   const buttons = tutorialNav();
-  const leaving = state.tutorialReturn === "settings" ? "Fechar" : "Pular";
-  drawPill(buttons.back, state.tutorialPage === 0 ? leaving : "Anterior", "rgba(190, 248, 255, 0.55)");
+  const leaving = state.tutorialReturn === "settings" ? "Close" : "Skip";
+  drawPill(buttons.back, state.tutorialPage === 0 ? leaving : "Previous", "rgba(190, 248, 255, 0.55)");
   const last = state.tutorialPage === TUTORIAL_PAGES.length - 1;
-  drawPill(buttons.next, last ? "Entendi" : "Próximo", "rgba(126, 249, 255, 0.95)");
+  drawPill(buttons.next, last ? "Got it" : "Next", "rgba(126, 249, 255, 0.95)");
 }
 
 function draw() {
@@ -3120,10 +3167,10 @@ function drawPaused() {
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#f4feff";
   ctx.font = font(Math.max(28, unit() * 0.07), 500);
-  ctx.fillText("Pausado", x, state.viewH * 0.42);
+  ctx.fillText("Paused", x, state.viewH * 0.42);
   ctx.fillStyle = "rgba(210, 226, 236, 0.82)";
   ctx.font = font(Math.max(16, unit() * 0.04), 500);
-  ctx.fillText("Toque para continuar", x, state.viewH * 0.5);
+  ctx.fillText("Tap to continue", x, state.viewH * 0.5);
 }
 
 function leaveScreen() {

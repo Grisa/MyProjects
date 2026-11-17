@@ -208,9 +208,9 @@ test("each act climbs to its own ceiling and the next act continues it", () => {
   assert.equal(actIndex(900), 3);
 
   assert.equal(actLine(0), "");
-  assert.equal(actLine(1), "Ato 2. A lasca e o riso entram.");
-  assert.equal(actLine(2), "Ato 3. A luz abre o campo.");
-  assert.equal(actLine(3), "Sem fim.");
+  assert.equal(actLine(1), "Act 2. Splinters and grins arrive.");
+  assert.equal(actLine(2), "Act 3. The light opens the field.");
+  assert.equal(actLine(3), "Endless. The dark does not stop.");
 
   const height = DIFFICULTY.referenceHeight;
   const start = difficultyAt(0, height);
