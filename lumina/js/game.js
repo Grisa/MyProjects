@@ -15,6 +15,9 @@ import {
   bossThreshold,
   bossWallCenters,
   noteBossLight,
+  noteShieldSpark,
+  novaRadius,
+  rollNova,
   scoreForPass,
   shufflePhrases,
   aimPair,
@@ -180,6 +183,8 @@ const state = {
   shake: 0,
   dying: false,
   guardUsed: false,
+  shielded: false,
+  shieldSparks: 0,
   hintSeen: loadHintSeen(),
   tutorialSeen: loadTutorialSeen(),
   tutorialPage: 0,
@@ -546,6 +551,8 @@ function resetRun(pointerX) {
   state.shake = 0;
   state.dying = false;
   state.guardUsed = false;
+  state.shielded = false;
+  state.shieldSparks = 0;
   state.mode = "play";
   rememberHint();
   announce("Pontos 0");
@@ -675,13 +682,15 @@ function spawnPair() {
 }
 
 function spawnSpark() {
-  const r = clamp(state.viewH * 0.018, 8, state.viewW * 0.05);
+  const nova = rollNova(perks().nova);
+  const r = clamp(state.viewH * (nova ? 0.022 : 0.018), 8, state.viewW * 0.05);
   const margin = r + 10;
   const span = Math.max(1, fieldW() - margin * 2);
   state.orbs.push({
     x: margin + Math.random() * span,
     y: -r * 4,
     r,
+    nova,
   });
 }
 
@@ -702,8 +711,23 @@ function collectSpark(orb) {
   const player = state.player;
   player.targetLight = Math.min(player.initialLight, player.targetLight + player.initialLight * perks().heal);
   if (player.targetLight > 0) state.dying = false;
-  popup(orb.x, orb.y, `+${gained}`);
+  const shield = noteShieldSpark(state.shieldSparks, state.shielded, perk.shieldEvery);
+  state.shieldSparks = shield.count;
+  state.shielded = shield.shielded;
+  popup(orb.x, orb.y, shield.gained ? "escudo" : `+${gained}`);
+  if (orb.nova) burstNova(orb.x, orb.y);
   playSpark();
+}
+
+function burstNova(x, y) {
+  const reach = novaRadius(fieldH());
+  burst(x, y);
+  for (let i = state.enemies.length - 1; i >= 0; i -= 1) {
+    const enemy = state.enemies[i];
+    if (Math.hypot(enemy.x - x, enemy.y - y) > reach + enemy.r) continue;
+    const struck = state.enemies.splice(i, 1)[0];
+    burst(struck.x, struck.y);
+  }
 }
 
 function burst(x, y) {
@@ -736,6 +760,14 @@ function impactPoint(player, enemy) {
 function hurt(enemy) {
   const player = state.player;
   const hit = impactPoint(player, enemy);
+  if (state.shielded) {
+    state.shielded = false;
+    state.shake = 0.45;
+    burst(hit.x, hit.y);
+    popup(player.x, player.y - unit() * 0.06, "escudo");
+    playGuard();
+    return;
+  }
   const perk = perks();
   let next = applyDamage(player.targetLight, player.initialLight, perk.damage);
   let guarded = false;
@@ -1932,6 +1964,39 @@ function drawSparkGlyph(x, y, radius) {
   ctx.drawImage(sprite, x - size / 2, y - size / 2, size, size);
 }
 
+let novaSprite = null;
+
+function novaSpriteCanvas() {
+  if (novaSprite) return novaSprite;
+  const size = 128;
+  const sprite = document.createElement("canvas");
+  sprite.width = size;
+  sprite.height = size;
+  const g = sprite.getContext("2d");
+  const mid = size / 2;
+  const radius = size * 0.16;
+  const glow = g.createRadialGradient(mid, mid, 0, mid, mid, radius * 3.4);
+  glow.addColorStop(0, "rgba(232, 248, 255, 0.98)");
+  glow.addColorStop(0.35, "rgba(64, 168, 255, 0.55)");
+  glow.addColorStop(1, "rgba(40, 110, 255, 0)");
+  g.fillStyle = glow;
+  g.beginPath();
+  g.arc(mid, mid, radius * 3.4, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = "#d7f4ff";
+  g.beginPath();
+  g.arc(mid, mid, radius, 0, Math.PI * 2);
+  g.fill();
+  novaSprite = sprite;
+  return sprite;
+}
+
+function drawNovaGlyph(x, y, radius) {
+  const sprite = novaSpriteCanvas();
+  const size = radius * 3.4 * 2;
+  ctx.drawImage(sprite, x - size / 2, y - size / 2, size, size);
+}
+
 function drawSparkCount(x, y, align = "left") {
   ctx.save();
   ctx.textAlign = align;
@@ -2076,6 +2141,16 @@ function drawIcon(icon, x, y, size, color) {
     ctx.lineTo(-s * 0.25, 0);
     ctx.moveTo(s * 0.25, 0);
     ctx.lineTo(s * 0.85, 0);
+    ctx.stroke();
+  } else if (icon === "nova") {
+    ctx.arc(0, 0, s * 0.28, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    for (let i = 0; i < 6; i += 1) {
+      const angle = (Math.PI * 2 * i) / 6;
+      ctx.moveTo(Math.cos(angle) * s * 0.5, Math.sin(angle) * s * 0.5);
+      ctx.lineTo(Math.cos(angle) * s * 1.05, Math.sin(angle) * s * 1.05);
+    }
     ctx.stroke();
   } else if (icon === "prism") {
     ctx.moveTo(0, -s * 0.8);
@@ -2941,6 +3016,7 @@ function draw() {
       for (const enemy of state.enemies) drawEnemy(enemy);
       for (const orb of state.orbs) {
         if (orb.core) drawBossCore(orb);
+        else if (orb.nova) drawNovaGlyph(orb.x, orb.y, orb.r);
         else drawSparkGlyph(orb.x, orb.y, orb.r);
       }
       if (state.boss) drawBoss();
@@ -2957,6 +3033,14 @@ function draw() {
     }
     if (state.player.lightRadius > 2) {
       drawCore(state.player.x, state.player.y, shownCoreRadius(state.player));
+      if (state.shielded) {
+        const ring = shownCoreRadius(state.player) + unit() * 0.03;
+        ctx.strokeStyle = "rgba(186, 244, 255, 0.9)";
+        ctx.lineWidth = Math.max(2, unit() * 0.006);
+        ctx.beginPath();
+        ctx.arc(state.player.x, state.player.y, ring, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     }
     ctx.restore();
     drawFlash();

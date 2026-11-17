@@ -514,6 +514,40 @@ export function bossThreshold(visit) {
   return BOSS_SCORE + Math.max(0, visit) * BOSS_GAP;
 }
 
+/**
+ * Sparks until the next shield. Level 0 means the player has not bought it.
+ * Each level costs more than the usual nodes of that tier.
+ */
+export function shieldEvery(level) {
+  if (level >= 3) return 3;
+  if (level === 2) return 4;
+  if (level === 1) return 5;
+  return 0;
+}
+
+/**
+ * One spark toward the shield. A full count grants a single shield.
+ * Sparks collected while it is already up do not start the next one.
+ */
+export function noteShieldSpark(count, shielded, every) {
+  if (!every || shielded) return { count, shielded: Boolean(shielded), gained: false };
+  const next = Math.max(0, count) + 1;
+  if (next >= every) return { count: 0, shielded: true, gained: true };
+  return { count: next, shielded: false, gained: false };
+}
+
+/** Share of spark drops that come out blue, once Clarão is owned. */
+export const NOVA_CHANCE = 0.22;
+
+export function rollNova(enabled, random = Math.random) {
+  return Boolean(enabled) && random() < NOVA_CHANCE;
+}
+
+/** Radius of the small flash a blue spark makes when it is caught. */
+export function novaRadius(fieldHeight) {
+  return Math.max(1, fieldHeight) * 0.16;
+}
+
 /** A pass scores nothing while the mantle owns the field. */
 export function scoreForPass(gained, bossUp) {
   if (bossUp) return 0;

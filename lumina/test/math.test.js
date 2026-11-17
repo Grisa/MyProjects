@@ -19,7 +19,11 @@ import {
   bossPhrase,
   bossThreshold,
   bossWallCenters,
+  NOVA_CHANCE,
   noteBossLight,
+  noteShieldSpark,
+  novaRadius,
+  rollNova,
   scoreForPass,
   dueBeats,
   shufflePhrases,
@@ -332,6 +336,34 @@ test("the mantle scores nothing, and two missed lights close the field", () => {
     const covered = centers.some((center) => Math.abs(center - x) <= radius + core);
     assert.equal(covered, true);
   }
+});
+
+test("five sparks raise one shield, and a blue spark is the rare drop", () => {
+  let count = 0;
+  let shielded = false;
+  let gained = false;
+  for (let i = 0; i < 4; i += 1) {
+    const step = noteShieldSpark(count, shielded, 5);
+    count = step.count;
+    shielded = step.shielded;
+    gained = step.gained;
+  }
+  assert.equal(gained, false);
+  assert.equal(count, 4);
+  const ready = noteShieldSpark(count, shielded, 5);
+  assert.equal(ready.gained, true);
+  assert.equal(ready.shielded, true);
+  assert.equal(ready.count, 0);
+  const held = noteShieldSpark(0, true, 3);
+  assert.equal(held.gained, false);
+  assert.equal(held.count, 0);
+
+  assert.equal(rollNova(false, () => 0), false);
+  assert.equal(rollNova(true, () => 0), true);
+  assert.equal(rollNova(true, () => 0.99), false);
+  assert.ok(NOVA_CHANCE < 0.35);
+  assert.ok(novaRadius(800) < 800 * 0.22);
+  assert.ok(novaRadius(800) > 80);
 });
 
 test("the mantle waits at 600 and returns 300 points later", () => {

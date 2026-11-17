@@ -211,6 +211,46 @@ export const UPGRADES = [
     requires: ["vortice"],
     icon: "magnet",
   },
+  {
+    id: "escudo",
+    name: "Escudo 1",
+    text: "A cada 5 faíscas, um escudo.",
+    cost: 28,
+    col: 4,
+    row: 3,
+    requires: ["centelha"],
+    icon: "shield",
+  },
+  {
+    id: "escudo2",
+    name: "Escudo 2",
+    text: "O escudo vem a cada 4 faíscas.",
+    cost: 52,
+    col: 4,
+    row: 4,
+    requires: ["escudo"],
+    icon: "shield",
+  },
+  {
+    id: "escudo3",
+    name: "Escudo 3",
+    text: "O escudo vem a cada 3 faíscas.",
+    cost: 78,
+    col: 4,
+    row: 5,
+    requires: ["escudo2"],
+    icon: "wall",
+  },
+  {
+    id: "clarao",
+    name: "Clarão",
+    text: "Às vezes cai uma faísca azul.",
+    cost: 36,
+    col: 3,
+    row: 4,
+    requires: ["ima"],
+    icon: "nova",
+  },
 ];
 
 export function upgradeById(id) {
@@ -274,5 +314,7 @@ export function bonuses(owned) {
     rim: has("vela") ? 0.92 : 0.58,
     guard: has("respiro"),
     interval: has("folga") ? 1.18 : 1,
+    shieldEvery: has("escudo3") ? 3 : has("escudo2") ? 4 : has("escudo") ? 5 : 0,
+    nova: has("clarao"),
   };
 }
