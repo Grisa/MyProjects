@@ -1925,17 +1925,49 @@ function onTreeTap(x, y) {
   }
 }
 
+const pillGlowSprites = new Map();
+
+function pillGlowSprite(w, h, accent) {
+  const pad = 22;
+  const dpr = state.dpr || 1;
+  const key = `${Math.round(w)}x${Math.round(h)}@${dpr}|${accent}`;
+  const cached = pillGlowSprites.get(key);
+  if (cached) return cached;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.ceil((w + pad * 2) * dpr));
+  canvas.height = Math.max(1, Math.ceil((h + pad * 2) * dpr));
+  const g = canvas.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.strokeStyle = accent;
+  g.lineWidth = 1.5;
+  g.shadowColor = accent;
+  g.shadowBlur = 12;
+  traceRoundRect(g, pad, pad, w, h, h / 2);
+  g.stroke();
+  const sprite = { canvas, pad };
+  if (pillGlowSprites.size > 32) pillGlowSprites.clear();
+  pillGlowSprites.set(key, sprite);
+  return sprite;
+}
+
 function drawPill(rect, label, accent, glow = true) {
-  ctx.save();
-  ctx.strokeStyle = accent;
-  ctx.lineWidth = 1.5;
   if (glow) {
-    ctx.shadowColor = accent;
-    ctx.shadowBlur = 12;
+    const sprite = pillGlowSprite(rect.w, rect.h, accent);
+    ctx.drawImage(
+      sprite.canvas,
+      rect.x - sprite.pad,
+      rect.y - sprite.pad,
+      rect.w + sprite.pad * 2,
+      rect.h + sprite.pad * 2,
+    );
+  } else {
+    ctx.save();
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 1.5;
+    roundRect(rect.x, rect.y, rect.w, rect.h, rect.h / 2);
+    ctx.stroke();
+    ctx.restore();
   }
-  roundRect(rect.x, rect.y, rect.w, rect.h, rect.h / 2);
-  ctx.stroke();
-  ctx.restore();
   ctx.fillStyle = "#e9fdff";
   ctx.font = font(Math.max(15, unit() * 0.038), 600);
   ctx.textAlign = "center";
@@ -2268,24 +2300,10 @@ function drawTree() {
   drawPill(buy, label, accent);
 }
 
-let lightLayer = null;
+let litTextCanvas = null;
+let litTextKey = "";
 
-function lightLayerContext() {
-  if (!lightLayer) lightLayer = document.createElement("canvas");
-  const width = Math.max(1, Math.ceil(state.viewW));
-  const height = Math.max(1, Math.ceil(state.viewH));
-  if (lightLayer.width !== width || lightLayer.height !== height) {
-    lightLayer.width = width;
-    lightLayer.height = height;
-  }
-  const layer = lightLayer.getContext("2d");
-  layer.setTransform(1, 0, 0, 1, 0, 0);
-  layer.globalCompositeOperation = "source-over";
-  layer.clearRect(0, 0, width, height);
-  return layer;
-}
-
-/** A faint letter in the dark, and the same letter caught by the ball's light. */
+/** A faint letter in the dark, and the same letter caught by the ball's light. The bright copy is baked once per layout. */
 function drawTextInLight(text, x, y, size, weight, tracking, lightX, lightY, radius, ghost) {
   const face = font(size, weight);
   ctx.save();
@@ -2297,26 +2315,52 @@ function drawTextInLight(text, x, y, size, weight, tracking, lightX, lightY, rad
   ctx.fillText(text, x, y);
   ctx.restore();
 
-  const layer = lightLayerContext();
-  layer.font = face;
-  layer.textAlign = "center";
-  layer.textBaseline = "middle";
-  if ("letterSpacing" in layer) layer.letterSpacing = `${tracking}px`;
-  layer.fillStyle = "#f7feff";
-  layer.shadowColor = "rgba(186, 244, 255, 0.95)";
-  layer.shadowBlur = size * 0.28;
-  layer.fillText(text, x, y);
-  layer.shadowBlur = 0;
-  layer.globalCompositeOperation = "destination-in";
-  const glow = layer.createRadialGradient(lightX, lightY, radius * 0.02, lightX, lightY, radius);
-  glow.addColorStop(0, "rgba(255,255,255,1)");
-  glow.addColorStop(0.34, "rgba(255,255,255,1)");
-  glow.addColorStop(0.58, "rgba(255,255,255,0.35)");
-  glow.addColorStop(0.78, "rgba(255,255,255,0)");
-  glow.addColorStop(1, "rgba(255,255,255,0)");
-  layer.fillStyle = glow;
-  layer.fillRect(0, 0, lightLayer.width, lightLayer.height);
-  ctx.drawImage(lightLayer, 0, 0);
+  const width = Math.max(1, Math.ceil(state.viewW));
+  const height = Math.max(1, Math.ceil(state.viewH));
+  const key = [
+    text,
+    face,
+    tracking,
+    Math.round(x),
+    Math.round(y),
+    Math.round(lightX),
+    Math.round(lightY),
+    Math.round(radius),
+    width,
+    height,
+  ].join("|");
+  if (litTextKey !== key || !litTextCanvas) {
+    if (!litTextCanvas) litTextCanvas = document.createElement("canvas");
+    if (litTextCanvas.width !== width || litTextCanvas.height !== height) {
+      litTextCanvas.width = width;
+      litTextCanvas.height = height;
+    }
+    const layer = litTextCanvas.getContext("2d");
+    layer.setTransform(1, 0, 0, 1, 0, 0);
+    layer.globalCompositeOperation = "source-over";
+    layer.clearRect(0, 0, width, height);
+    layer.font = face;
+    layer.textAlign = "center";
+    layer.textBaseline = "middle";
+    if ("letterSpacing" in layer) layer.letterSpacing = `${tracking}px`;
+    layer.fillStyle = "#f7feff";
+    layer.shadowColor = "rgba(186, 244, 255, 0.95)";
+    layer.shadowBlur = size * 0.28;
+    layer.fillText(text, x, y);
+    layer.shadowBlur = 0;
+    layer.globalCompositeOperation = "destination-in";
+    const glow = layer.createRadialGradient(lightX, lightY, radius * 0.02, lightX, lightY, radius);
+    glow.addColorStop(0, "rgba(255,255,255,1)");
+    glow.addColorStop(0.34, "rgba(255,255,255,1)");
+    glow.addColorStop(0.58, "rgba(255,255,255,0.35)");
+    glow.addColorStop(0.78, "rgba(255,255,255,0)");
+    glow.addColorStop(1, "rgba(255,255,255,0)");
+    layer.fillStyle = glow;
+    layer.fillRect(0, 0, width, height);
+    layer.globalCompositeOperation = "source-over";
+    litTextKey = key;
+  }
+  ctx.drawImage(litTextCanvas, 0, 0);
 }
 
 function menuStack() {
@@ -2370,22 +2414,50 @@ function drawLightRays(x, y, length) {
   ctx.restore();
 }
 
-function drawLightButton(rect, label) {
-  const breath = 0.72 + Math.sin(state.time * 1.8) * 0.28;
-  ctx.save();
-  ctx.shadowColor = "rgba(126, 249, 255, 0.9)";
-  ctx.shadowBlur = 18;
-  const fill = ctx.createLinearGradient(rect.x, rect.y, rect.x, rect.y + rect.h);
-  fill.addColorStop(0, `rgba(232, 254, 255, ${0.34 + breath * 0.18})`);
+const lightButtonSprites = new Map();
+
+function lightButtonSprite(w, h) {
+  const pad = 36;
+  const dpr = state.dpr || 1;
+  const key = `${Math.round(w)}x${Math.round(h)}@${dpr}`;
+  const cached = lightButtonSprites.get(key);
+  if (cached) return cached;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.ceil((w + pad * 2) * dpr));
+  canvas.height = Math.max(1, Math.ceil((h + pad * 2) * dpr));
+  const g = canvas.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.shadowColor = "rgba(126, 249, 255, 0.9)";
+  g.shadowBlur = 18;
+  const fill = g.createLinearGradient(pad, pad, pad, pad + h);
+  fill.addColorStop(0, "rgba(232, 254, 255, 0.52)");
   fill.addColorStop(0.55, "rgba(126, 220, 245, 0.16)");
   fill.addColorStop(1, "rgba(40, 110, 170, 0.08)");
-  ctx.fillStyle = fill;
-  roundRect(rect.x, rect.y, rect.w, rect.h, rect.h / 2);
-  ctx.fill();
-  ctx.strokeStyle = `rgba(244, 254, 255, ${0.75 + breath * 0.25})`;
-  ctx.lineWidth = 1.75;
-  ctx.stroke();
-  ctx.shadowBlur = 0;
+  g.fillStyle = fill;
+  traceRoundRect(g, pad, pad, w, h, h / 2);
+  g.fill();
+  g.strokeStyle = "rgba(244, 254, 255, 1)";
+  g.lineWidth = 1.75;
+  g.stroke();
+  const sprite = { canvas, pad };
+  if (lightButtonSprites.size > 8) lightButtonSprites.clear();
+  lightButtonSprites.set(key, sprite);
+  return sprite;
+}
+
+function drawLightButton(rect, label) {
+  const breath = 0.72 + Math.sin(state.time * 1.8) * 0.28;
+  const sprite = lightButtonSprite(rect.w, rect.h);
+  ctx.save();
+  ctx.globalAlpha = 0.62 + breath * 0.38;
+  ctx.drawImage(
+    sprite.canvas,
+    rect.x - sprite.pad,
+    rect.y - sprite.pad,
+    rect.w + sprite.pad * 2,
+    rect.h + sprite.pad * 2,
+  );
+  ctx.globalAlpha = 1;
   ctx.fillStyle = "#f7feff";
   ctx.font = font(Math.max(18, unit() * 0.046), 500);
   ctx.textAlign = "center";
@@ -2406,6 +2478,7 @@ function drawMenu() {
   drawGlow(x, y, radius * 1.25, 0.42);
   drawGlow(x, y, radius * 0.72, 1);
   drawLightRays(x, y, radius * 0.62);
+  const mask = unit() * 0.4;
   drawTextInLight(
     "LUMINA",
     x,
@@ -2415,7 +2488,7 @@ function drawMenu() {
     Math.round(titleSize * 0.22),
     x,
     y,
-    radius * 0.95,
+    mask * 0.95,
     0.16,
   );
   ctx.save();
@@ -2427,9 +2500,10 @@ function drawMenu() {
   ctx.restore();
   drawCore(x, y, core);
 
-  const play = playRect();
-  const upgrades = upgradesRect();
-  const codex = codexRect();
+  const stack = menuStack();
+  const play = stack.play;
+  const upgrades = stack.upgrades;
+  const codex = stack.codex;
   const recordY = Math.min(y + radius * 0.58, play.y - 78);
   const sparkY = recordY + Math.max(26, unit() * 0.06);
   ctx.save();
@@ -2456,31 +2530,56 @@ function drawMenu() {
   drawSettingsButton();
 }
 
-function roundRect(x, y, w, h, radius) {
+function traceRoundRect(g, x, y, w, h, radius) {
   const r = Math.min(radius, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+}
+
+function roundRect(x, y, w, h, radius) {
+  traceRoundRect(ctx, x, y, w, h, radius);
+}
+
+let overVeilCanvas = null;
+let overVeilKey = "";
+
+function drawOverVeil() {
+  const width = Math.max(1, Math.ceil(state.viewW));
+  const height = Math.max(1, Math.ceil(state.viewH));
+  const key = `${width}x${height}`;
+  if (overVeilKey !== key || !overVeilCanvas) {
+    if (!overVeilCanvas) overVeilCanvas = document.createElement("canvas");
+    overVeilCanvas.width = width;
+    overVeilCanvas.height = height;
+    const g = overVeilCanvas.getContext("2d");
+    const cx = width / 2;
+    const reach = Math.min(width, height);
+    const veil = g.createRadialGradient(cx, height * 0.28, reach * 0.04, cx, height * 0.36, reach * 0.78);
+    veil.addColorStop(0, "rgba(8, 18, 32, 0.28)");
+    veil.addColorStop(0.42, "rgba(4, 6, 14, 0.7)");
+    veil.addColorStop(1, "rgba(2, 3, 8, 0.9)");
+    g.fillStyle = veil;
+    g.fillRect(0, 0, width, height);
+    overVeilKey = key;
+  }
+  ctx.drawImage(overVeilCanvas, 0, 0);
 }
 
 function drawGameOver() {
   const x = state.viewW / 2;
-  const veil = ctx.createRadialGradient(x, state.viewH * 0.28, unit() * 0.04, x, state.viewH * 0.36, unit() * 0.78);
-  veil.addColorStop(0, "rgba(8, 18, 32, 0.28)");
-  veil.addColorStop(0.42, "rgba(4, 6, 14, 0.7)");
-  veil.addColorStop(1, "rgba(2, 3, 8, 0.9)");
-  ctx.fillStyle = veil;
-  ctx.fillRect(0, 0, state.viewW, state.viewH);
+  drawOverVeil();
 
   const titleSize = Math.max(22, Math.min(30, unit() * 0.064));
   const titleY = state.viewH * 0.2;
   const y = titleY + titleSize * 0.95;
   const pulse = 0.92 + Math.sin(state.time * 1.15) * 0.08;
   const radius = unit() * 0.2 * pulse;
+  const mask = unit() * 0.2;
 
   drawGlow(x, y, radius * 1.35, 0.34);
   drawGlow(x, y, radius * 0.62, 0.7);
@@ -2497,7 +2596,7 @@ function drawGameOver() {
     Math.round(titleSize * 0.045),
     x,
     y,
-    radius * 1.2,
+    mask * 1.2,
     0.28,
   );
   ctx.save();
