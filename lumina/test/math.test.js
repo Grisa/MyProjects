@@ -38,6 +38,8 @@ import {
   ENDLESS_PACE,
   actIndex,
   actLine,
+  vesperActs,
+  vesperLight,
   castKinds,
   paceAt,
   spawnJitter,
@@ -211,6 +213,17 @@ test("each act climbs to its own ceiling and the next act continues it", () => {
   assert.equal(actLine(1), "Act 2. Splinters and grins arrive.");
   assert.equal(actLine(2), "Act 3. The light opens the field.");
   assert.equal(actLine(3), "Endless. The dark does not stop.");
+  assert.equal(vesperActs(0, 0), 0);
+  assert.equal(vesperActs(0, 1), 1);
+  assert.equal(vesperActs(2, 3), 1);
+  assert.equal(vesperActs(0, 3), 3);
+  assert.equal(vesperActs(3, 6), 0);
+  assert.equal(vesperLight(100, 100), 100);
+  assert.equal(vesperLight(62, 100), 76);
+  assert.equal(vesperLight(80, 100), 82);
+  let light = 40;
+  for (let i = 0; i < 3; i += 1) light = vesperLight(light, 100);
+  assert.equal(light, 82);
 
   const height = DIFFICULTY.referenceHeight;
   const start = difficultyAt(0, height);

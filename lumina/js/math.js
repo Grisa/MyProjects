@@ -40,6 +40,10 @@ export const BLOOM_SECONDS = 3;
 export const BLOOM_SPAN = 1.7;
 export const DAMAGE_FRACTION = 0.38;
 export const EXTINGUISH_FRACTION = 0.25;
+/** Share of the starting light Vesper gives back when an act begins. */
+export const VESPER_SLICE = 0.14;
+/** Vesper never restores the light past this share of the start. */
+export const VESPER_CAP = 0.82;
 
 export function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -333,6 +337,26 @@ export function actIndex(score) {
 
 export function actBanner(index) {
   return ACT_LINES[index] || null;
+}
+
+/**
+ * A slice of the starting light. Full light stays full.
+ * Hurt light stops under the cap, so an act is a breath and not a heal to full.
+ */
+export function vesperLight(current, initial, slice = VESPER_SLICE, cap = VESPER_CAP) {
+  if (!(initial > 0)) return current;
+  const ceiling = initial * cap;
+  if (current >= ceiling) return current;
+  return Math.min(ceiling, current + initial * slice);
+}
+
+/** How many act breaths a score jump crosses. Acts 1, 2, and 3 each pay once. */
+export function vesperActs(from, to) {
+  let count = 0;
+  for (let act = from + 1; act <= to; act += 1) {
+    if (act >= 1 && act <= 3) count += 1;
+  }
+  return count;
 }
 
 /** Spoken line for the act change. The title and the detail stay on separate rows. */

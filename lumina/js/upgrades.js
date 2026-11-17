@@ -92,6 +92,16 @@ export const UPGRADES = [
     icon: "eye",
   },
   {
+    id: "vesper",
+    name: "Vesper",
+    text: "Each act returns a slice of light.",
+    cost: 56,
+    col: 2,
+    row: -1,
+    requires: ["farol"],
+    icon: "vesper",
+  },
+  {
     id: "casco",
     name: "Shell 1",
     text: "Each hit takes a little less.",
@@ -316,5 +326,6 @@ export function bonuses(owned) {
     interval: has("folga") ? 1.18 : 1,
     shieldEvery: has("escudo3") ? 3 : has("escudo2") ? 4 : has("escudo") ? 5 : 0,
     nova: has("clarao"),
+    vesper: has("vesper"),
   };
 }

@@ -29,6 +29,8 @@ import {
   actBanner,
   actIndex,
   actLine,
+  vesperActs,
+  vesperLight,
   castKinds,
   paceAt,
   waveWait,
@@ -529,7 +531,22 @@ function noteAct() {
   state.actBannerLeft = banner ? ACT_BANNER : 0;
   const line = actLine(next);
   if (line) announce(line);
+  grantVesper(state.actFrom, next);
   return Boolean(line);
+}
+
+function grantVesper(from, to) {
+  const times = vesperActs(from, to);
+  if (times <= 0 || !perks().vesper) return;
+  const player = state.player;
+  if (!player) return;
+  let next = player.targetLight;
+  for (let i = 0; i < times; i += 1) next = vesperLight(next, player.initialLight);
+  if (next <= player.targetLight) return;
+  player.targetLight = next;
+  state.dying = false;
+  popup(player.x, player.y - unit() * 0.08, "vesper");
+  burst(player.x, player.y);
 }
 
 function resetRun(pointerX) {
@@ -2167,6 +2184,13 @@ function drawIcon(icon, x, y, size, color) {
     ctx.moveTo(-s * 0.62, -s * 0.05);
     ctx.lineTo(0, -s * 0.85);
     ctx.lineTo(s * 0.62, -s * 0.05);
+    ctx.stroke();
+  } else if (icon === "vesper") {
+    ctx.moveTo(-s * 0.9, s * 0.28);
+    ctx.lineTo(s * 0.9, s * 0.28);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, s * 0.28, s * 0.55, Math.PI * 1.08, Math.PI * 1.92);
     ctx.stroke();
   } else if (icon === "eye") {
     ctx.ellipse(0, 0, s * 0.9, s * 0.52, 0, 0, Math.PI * 2);

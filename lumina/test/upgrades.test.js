@@ -57,6 +57,7 @@ test("bonuses stack along a branch", () => {
   assert.equal(base.magnet, 0);
   assert.equal(base.shieldEvery, 0);
   assert.equal(base.nova, false);
+  assert.equal(base.vesper, false);
 
   const grown = bonuses(new Set([
     "centelha", "halo", "aurora", "farol", "vela", "casco", "muralha", "respiro",
@@ -103,4 +104,9 @@ test("tiers get stronger and more expensive", () => {
   assert.equal(nodeState(upgradeById("escudo2"), new Set(["centelha", "escudo"])), "available");
   assert.equal(nodeState(upgradeById("clarao"), new Set(["centelha"])), "locked");
   assert.equal(nodeState(upgradeById("clarao"), new Set(["centelha", "ima"])), "available");
+  assert.equal(bonuses(new Set(["vesper"])).vesper, true);
+  assert.ok(upgradeById("vesper").cost > upgradeById("farol").cost);
+  assert.equal(upgradeById("vesper").requires[0], "farol");
+  assert.equal(nodeState(upgradeById("vesper"), new Set(["centelha", "halo", "aurora"])), "locked");
+  assert.equal(nodeState(upgradeById("vesper"), new Set(["farol"])), "available");
 });
