@@ -2309,16 +2309,28 @@ function drawTextInLight(text, x, y, size, weight, tracking, lightX, lightY, rad
   ctx.drawImage(lightLayer, 0, 0);
 }
 
+function menuStack() {
+  const h = Math.max(52, unit() * 0.09);
+  const w = Math.min(state.viewW * 0.74, 320);
+  const gap = 14;
+  const x = (state.viewW - w) / 2;
+  const bottom = state.viewH - Math.max(28, state.viewH * 0.05);
+  const codex = { x, y: bottom - h, w, h };
+  const upgrades = { x, y: codex.y - gap - h, w, h };
+  const play = { x, y: upgrades.y - gap - h, w, h };
+  return { play, upgrades, codex };
+}
+
 function playRect() {
-  return buttonRect(0.48);
+  return menuStack().play;
 }
 
 function upgradesRect() {
-  return buttonRect(0.74);
+  return menuStack().upgrades;
 }
 
 function codexRect() {
-  return buttonRect(0.86);
+  return menuStack().codex;
 }
 
 function drawLightRays(x, y, length) {
@@ -2395,30 +2407,31 @@ function drawMenu() {
   drawCore(x, y, core);
 
   const play = playRect();
-  drawLightButton(play, "Jogar");
-
-  const button = upgradesRect();
-  const sparkY = button.y - Math.max(36, unit() * 0.09);
-  const recordY = sparkY - Math.max(28, unit() * 0.07);
-  if (!state.hintSeen && recordY - (play.y + play.h) > 48) {
+  const upgrades = upgradesRect();
+  const codex = codexRect();
+  const recordY = Math.min(y + radius * 0.58, play.y - 78);
+  const sparkY = recordY + Math.max(26, unit() * 0.06);
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "rgba(210, 226, 236, 0.78)";
+  ctx.font = font(Math.max(14, unit() * 0.036), 500);
+  ctx.fillText(state.highScore > 0 ? `Recorde ${state.highScore}` : "Recorde 0", x, recordY);
+  ctx.restore();
+  drawSparkCount(x, sparkY, "center");
+  if (!state.hintSeen && play.y - sparkY > 46) {
     ctx.save();
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillStyle = "rgba(214, 232, 240, 0.82)";
     ctx.font = font(Math.max(15, unit() * 0.038), 500);
-    ctx.fillText("A luz também é a vida", x, play.y + play.h + (recordY - play.y - play.h) * 0.45);
+    ctx.fillText("A luz também é a vida", x, sparkY + (play.y - sparkY) * 0.55);
     ctx.restore();
   }
-  ctx.save();
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = "rgba(210, 226, 236, 0.72)";
-  ctx.font = font(Math.max(14, unit() * 0.036), 500);
-  ctx.fillText(state.highScore > 0 ? `Recorde ${state.highScore}` : "Recorde 0", x, recordY);
-  ctx.restore();
-  drawSparkCount(x, sparkY, "center");
-  drawPill(button, "Melhorias", "rgba(255, 214, 120, 0.9)");
-  drawPill(codexRect(), "Codex", "rgba(190, 248, 255, 0.75)");
+
+  drawLightButton(play, "Jogar");
+  drawPill(upgrades, "Melhorias", "rgba(255, 214, 120, 0.9)");
+  drawPill(codex, "Codex", "rgba(190, 248, 255, 0.75)");
   drawSettingsButton();
 }
 
