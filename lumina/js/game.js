@@ -320,7 +320,7 @@ function rememberHint() {
 function menuLine() {
   const record = state.highScore > 0 ? ` Recorde ${state.highScore}.` : "";
   const hint = state.hintSeen ? "" : " A luz também é a vida.";
-  return `Toque para jogar.${record}${hint}`;
+  return `Jogar.${record}${hint}`;
 }
 
 function loadHighScore() {
@@ -1334,9 +1334,11 @@ function onPointerDown(event) {
       openCodex();
       return;
     }
-    playBegin();
-    resetRun(point.x);
-    capturePointer(event);
+    if (insideRect(point.x, point.y, playRect())) {
+      playBegin();
+      resetRun(point.x);
+      capturePointer(event);
+    }
     return;
   }
   if (state.mode === "over") {
@@ -2307,6 +2309,10 @@ function drawTextInLight(text, x, y, size, weight, tracking, lightX, lightY, rad
   ctx.drawImage(lightLayer, 0, 0);
 }
 
+function playRect() {
+  return buttonRect(0.48);
+}
+
 function upgradesRect() {
   return buttonRect(0.74);
 }
@@ -2315,60 +2321,98 @@ function codexRect() {
   return buttonRect(0.86);
 }
 
-function drawMenu() {
-  const pulse = 1 + Math.sin(state.time * 2.2) * 0.1;
-  const x = state.viewW / 2;
-  const radius = unit() * LIGHT_FRAC * pulse;
-  const titleSize = Math.max(42, unit() * 0.12);
-  const hintSize = Math.max(16, unit() * 0.04);
-  const core = unit() * CORE_FRAC;
-  const titleY = state.viewH * 0.28;
-  const y = titleY + titleSize * 0.62 + core + 18;
-  const hintY = y + radius * 0.72;
+function drawLightRays(x, y, length) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(state.time * 0.12);
+  ctx.strokeStyle = "rgba(190, 248, 255, 0.22)";
+  ctx.lineWidth = 1.25;
+  ctx.beginPath();
+  for (let i = 0; i < 8; i += 1) {
+    const angle = (Math.PI * 2 * i) / 8;
+    ctx.moveTo(Math.cos(angle) * length * 0.22, Math.sin(angle) * length * 0.22);
+    ctx.lineTo(Math.cos(angle) * length, Math.sin(angle) * length);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
 
-  drawGlow(x, y, radius, 1);
+function drawLightButton(rect, label) {
+  const breath = 0.72 + Math.sin(state.time * 1.8) * 0.28;
+  ctx.save();
+  ctx.shadowColor = "rgba(126, 249, 255, 0.9)";
+  ctx.shadowBlur = 18;
+  const fill = ctx.createLinearGradient(rect.x, rect.y, rect.x, rect.y + rect.h);
+  fill.addColorStop(0, `rgba(232, 254, 255, ${0.34 + breath * 0.18})`);
+  fill.addColorStop(0.55, "rgba(126, 220, 245, 0.16)");
+  fill.addColorStop(1, "rgba(40, 110, 170, 0.08)");
+  ctx.fillStyle = fill;
+  roundRect(rect.x, rect.y, rect.w, rect.h, rect.h / 2);
+  ctx.fill();
+  ctx.strokeStyle = `rgba(244, 254, 255, ${0.75 + breath * 0.25})`;
+  ctx.lineWidth = 1.75;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "#f7feff";
+  ctx.font = font(Math.max(18, unit() * 0.046), 500);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(label, rect.x + rect.w / 2, rect.y + rect.h / 2);
+  ctx.restore();
+}
+
+function drawMenu() {
+  const pulse = 0.94 + Math.sin(state.time * 1.6) * 0.06;
+  const x = state.viewW / 2;
+  const titleSize = Math.max(48, unit() * 0.135);
+  const core = unit() * CORE_FRAC * 1.2;
+  const titleY = state.viewH * 0.24;
+  const y = titleY + titleSize * 0.95;
+  const radius = unit() * 0.4 * pulse;
+
+  drawGlow(x, y, radius * 1.25, 0.42);
+  drawGlow(x, y, radius * 0.72, 1);
+  drawLightRays(x, y, radius * 0.62);
   drawTextInLight(
     "LUMINA",
     x,
     titleY,
     titleSize,
-    500,
-    Math.round(titleSize * 0.14),
+    100,
+    Math.round(titleSize * 0.22),
     x,
     y,
-    radius * 1.35,
-    0.34,
+    radius * 0.95,
+    0.16,
   );
+  ctx.save();
+  ctx.strokeStyle = "rgba(214, 252, 255, 0.45)";
+  ctx.lineWidth = 1.25;
+  ctx.beginPath();
+  ctx.arc(x, y, core * 3.4 + Math.sin(state.time * 2.1) * 1.4, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
   drawCore(x, y, core);
-  drawTextInLight(
-    "Toque para jogar",
-    x,
-    hintY,
-    hintSize,
-    500,
-    0,
-    x,
-    y,
-    radius * 1.15,
-    0.45,
-  );
+
+  const play = playRect();
+  drawLightButton(play, "Jogar");
 
   const button = upgradesRect();
   const sparkY = button.y - Math.max(36, unit() * 0.09);
   const recordY = sparkY - Math.max(28, unit() * 0.07);
-  if (!state.hintSeen && recordY - hintY > 64) {
+  if (!state.hintSeen && recordY - (play.y + play.h) > 48) {
     ctx.save();
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillStyle = "rgba(214, 232, 240, 0.82)";
     ctx.font = font(Math.max(15, unit() * 0.038), 500);
-    ctx.fillText("A luz também é a vida", x, hintY + (recordY - hintY) * 0.42);
+    ctx.fillText("A luz também é a vida", x, play.y + play.h + (recordY - play.y - play.h) * 0.45);
     ctx.restore();
   }
   ctx.save();
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillStyle = "rgba(210, 226, 236, 0.62)";
+  ctx.fillStyle = "rgba(210, 226, 236, 0.72)";
   ctx.font = font(Math.max(14, unit() * 0.036), 500);
   ctx.fillText(state.highScore > 0 ? `Recorde ${state.highScore}` : "Recorde 0", x, recordY);
   ctx.restore();
