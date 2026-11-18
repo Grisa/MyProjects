@@ -324,7 +324,7 @@ export function bonuses(owned) {
     follow,
     heal: has("centelha") ? 0.34 : 0.2,
     magnet,
-    sparkInterval: has("abundancia") ? 3.2 : 5,
+    plenty: has("abundancia"),
     sparkValue: has("brasa") ? 2 : 1,
     sparkScore: has("prisma") ? 1 : 0,
     regen: has("folego") ? 0.045 : 0,

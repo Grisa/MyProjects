@@ -46,6 +46,23 @@ export const VESPER_SLICE = 0.14;
 export const VESPER_CAP = 0.82;
 /** How long a Mark stain waits for the next shadow. */
 export const MARK_LIFE = 4.2;
+/** Spark gap by act: slow at the start, then tighter, and never under the floor. */
+export const SPARK_PACE = [12, 8, 6, 4.5];
+/** Sparks allowed on screen at once, by act. */
+export const SPARK_CAP = [1, 1, 2, 2];
+export const SPARK_FLOOR = 4.5;
+/** Plenty shortens the gap, and the floor still holds. */
+export const PLENTY_PACE = 0.75;
+
+export function sparkPace(score, plenty = false) {
+  const base = SPARK_PACE[actIndex(score)] ?? SPARK_PACE[SPARK_PACE.length - 1];
+  const paced = plenty ? base * PLENTY_PACE : base;
+  return Math.max(SPARK_FLOOR, paced);
+}
+
+export function sparkCap(score) {
+  return SPARK_CAP[actIndex(score)] ?? SPARK_CAP[SPARK_CAP.length - 1];
+}
 
 export function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));

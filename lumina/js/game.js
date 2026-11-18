@@ -33,6 +33,8 @@ import {
   vesperLight,
   MARK_LIFE,
   markCatches,
+  sparkPace,
+  sparkCap,
   lossLine,
   nextRunGoal,
   goalLine,
@@ -579,7 +581,7 @@ function resetRun(pointerX) {
   state.score = 0;
   state.elapsed = 0;
   state.spawnTimer = 0.45;
-  state.sparkTimer = 1.5;
+  state.sparkTimer = sparkPace(0, perks().plenty);
   state.calm = 0;
   state.shake = 0;
   state.dying = false;
@@ -1152,8 +1154,9 @@ function update(dt) {
       if (!state.boss) {
         state.sparkTimer -= dt;
         if (state.sparkTimer <= 0) {
-          spawnSpark();
-          state.sparkTimer += perk.sparkInterval;
+          const falling = state.orbs.reduce((count, orb) => count + (orb.core ? 0 : 1), 0);
+          if (falling < sparkCap(state.score)) spawnSpark();
+          state.sparkTimer += sparkPace(state.score, perk.plenty);
         }
       }
       if (perk.regen > 0 && state.calm >= perk.calmDelay && player.targetLight < player.initialLight) {
@@ -2286,6 +2289,27 @@ function drawIcon(icon, x, y, size, color) {
   ctx.restore();
 }
 
+function drawOwnedMark(box) {
+  const r = Math.max(6.5, box.w * 0.16);
+  const x = box.x + box.w - r * 0.35;
+  const y = box.y + r * 0.35;
+  ctx.save();
+  ctx.fillStyle = "#f7feff";
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#102028";
+  ctx.lineWidth = Math.max(1.4, r * 0.28);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(x - r * 0.42, y + r * 0.02);
+  ctx.lineTo(x - r * 0.08, y + r * 0.36);
+  ctx.lineTo(x + r * 0.46, y - r * 0.38);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawTree() {
   const metrics = treeMetrics();
   const card = detailCard();
@@ -2310,7 +2334,7 @@ function drawTree() {
       ctx.strokeStyle = childState === "bright"
         ? "rgba(186, 244, 255, 0.9)"
         : childState === "soft"
-          ? "rgba(150, 200, 220, 0.5)"
+          ? "rgba(255, 196, 110, 0.75)"
           : "rgba(70, 84, 96, 0.28)";
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -2325,17 +2349,20 @@ function drawTree() {
     const glow = nodeGlow(upgrade, state.owned, state.sparks);
     const selected = upgrade.id === state.selectedId;
     if (glow === "bright") drawGlow(box.cx, box.cy, box.w * 0.95, 0.85);
-    else if (glow === "soft") drawGlow(box.cx, box.cy, box.w * 0.72, 0.28);
-    ctx.fillStyle = glow === "dim" ? "#080a10" : "#121820";
+    ctx.fillStyle = glow === "bright"
+      ? "rgba(214, 244, 255, 0.28)"
+      : glow === "dim"
+        ? "#080a10"
+        : "#10141c";
     ctx.globalAlpha = glow === "dim" ? 0.72 : 1;
     roundRect(box.x, box.y, box.w, box.h, 10);
     ctx.fill();
     ctx.globalAlpha = 1;
-    ctx.lineWidth = selected ? 3.2 : 1.6;
+    ctx.lineWidth = selected ? 3.2 : glow === "soft" ? 2.4 : 1.6;
     ctx.strokeStyle = glow === "bright"
       ? "rgba(244, 254, 255, 0.95)"
       : glow === "soft"
-        ? "rgba(186, 230, 244, 0.7)"
+        ? "rgba(255, 214, 120, 0.95)"
         : selected
           ? "rgba(180, 196, 208, 0.45)"
           : "rgba(70, 84, 96, 0.35)";
@@ -2343,9 +2370,10 @@ function drawTree() {
     const ink = glow === "bright"
       ? "#f7feff"
       : glow === "soft"
-        ? "rgba(214, 236, 244, 0.9)"
+        ? "rgba(255, 220, 150, 0.95)"
         : "rgba(150, 166, 176, 0.32)";
     drawIcon(upgrade.icon, box.cx, box.cy, box.w, ink);
+    if (glow === "bright") drawOwnedMark(box);
   }
   ctx.restore();
 
@@ -2374,7 +2402,7 @@ function drawTree() {
   const accent = status === "owned"
     ? "rgba(186, 244, 255, 0.95)"
     : affordable
-      ? "rgba(186, 220, 232, 0.7)"
+      ? "rgba(255, 214, 120, 0.95)"
       : "rgba(90, 104, 116, 0.45)";
   drawPill(buy, label, accent);
 }

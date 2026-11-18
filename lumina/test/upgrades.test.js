@@ -59,6 +59,7 @@ test("bonuses stack along a branch", () => {
   assert.equal(base.nova, false);
   assert.equal(base.vesper, false);
   assert.equal(base.mark, false);
+  assert.equal(base.plenty, false);
 
   const grown = bonuses(new Set([
     "centelha", "halo", "aurora", "farol", "vela", "casco", "muralha", "respiro",

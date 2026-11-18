@@ -42,6 +42,8 @@ import {
   vesperLight,
   MARK_LIFE,
   markCatches,
+  sparkPace,
+  sparkCap,
   lossLine,
   nextRunGoal,
   goalLine,
@@ -244,6 +246,15 @@ test("each act climbs to its own ceiling and the next act continues it", () => {
   assert.equal(goalLine({ left: 1, name: "Act 2" }), "1 point until Act 2.");
   assert.equal(goalLine(null), "");
   assert.equal(MARK_LIFE > 3, true);
+  assert.equal(sparkPace(0, false), 12);
+  assert.equal(sparkPace(0, true), 9);
+  assert.equal(sparkPace(250, false), 8);
+  assert.equal(sparkPace(450, false), 6);
+  assert.equal(sparkPace(700, true), 4.5);
+  assert.equal(sparkCap(0), 1);
+  assert.equal(sparkCap(250), 1);
+  assert.equal(sparkCap(450), 2);
+  assert.equal(sparkCap(900), 2);
 
   const height = DIFFICULTY.referenceHeight;
   const start = difficultyAt(0, height);
