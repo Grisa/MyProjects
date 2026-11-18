@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lumina — sounds</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: #04060c;
+        color: #d6e8f0;
+        font: 500 16px "Segoe UI", system-ui, sans-serif;
+      }
+      main {
+        max-width: 32rem;
+        margin: 0 auto;
+        padding: 2.5rem 1.25rem 4rem;
+      }
+      h1 {
+        margin: 0 0 0.4rem;
+        font-weight: 500;
+        letter-spacing: 0.28em;
+        font-size: 1.4rem;
+      }
+      p { color: rgba(214, 232, 240, 0.72); line-height: 1.45; }
+      ul { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+      li { margin: 0 0 1.1rem; }
+      span { display: block; margin-bottom: 0.35rem; }
+      audio { width: 100%; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>LUMINA</h1>
+      <p>
+        These are the game's sounds, recorded from the same synthesizer. In the file they are a little louder.
+        In a run, sound starts on the first tap. The speaker in the corner turns it off.
+      </p>
+      <ul>
+        <li><span>All in sequence</span><audio controls src="samples/amostra.wav"></audio></li>
+        <li><span>Background, light high</span><audio controls src="samples/fundo.wav"></audio></li>
+        <li><span>Start</span><audio controls src="samples/comecar.wav"></audio></li>
+        <li><span>Enemy passed far</span><audio controls src="samples/passar.wav"></audio></li>
+        <li><span>Close graze</span><audio controls src="samples/rente.wav"></audio></li>
+        <li><span>Spark</span><audio controls src="samples/faisca.wav"></audio></li>
+        <li><span>Hit</span><audio controls src="samples/batida.wav"></audio></li>
+        <li><span>Shield</span><audio controls src="samples/escudo.wav"></audio></li>
+        <li><span>Purchase</span><audio controls src="samples/comprar.wav"></audio></li>
+        <li><span>Button tap</span><audio controls src="samples/toque.wav"></audio></li>
+        <li><span>The light goes out</span><audio controls src="samples/apagar.wav"></audio></li>
+      </ul>
+    </main>
+  </body>
+</html>

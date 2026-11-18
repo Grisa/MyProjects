@@ -1,0 +1,20 @@
+{
+  "name": "lumina",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Lumina, um endless runner vertical de luz.",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 4173",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@capacitor-community/admob": "^8.4.2",
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.6.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.2"
+  }
+}
