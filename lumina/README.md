@@ -72,7 +72,7 @@ O identificador na Play é `com.grisa.lumina.game`. O bundle assinado para o tes
    O APK fica em `app/build/outputs/apk/debug/app-debug.apk`. Ele é assinado com a chave de debug. A Play Store pede o bundle assinado com o seu keystore, no passo seguinte.
 7. Gere o ícone adaptativo a partir de `icon.svg` (a loja pede PNG de 512 px, além dos tamanhos do Android).
 8. No Android Studio, crie um keystore de upload e gere o Android App Bundle assinado (Build, Generate Signed Bundle). Guarde o keystore fora do git.
-9. Na Play Console, preencha a ficha: texto, ícone, gráfico de destaque, capturas em retrato, classificação etária e uma URL pública de política de privacidade. Use o `targetSdk` que a loja exigir na data do envio. Na seção de segurança dos dados, declare que o anúncio é da Google.
+9. Na Play Console, preencha a ficha: texto, ícone, gráfico de destaque, capturas em retrato, classificação etária e uma URL pública de política de privacidade. O texto está em `privacy/index.html`. Use o `targetSdk` que a loja exigir na data do envio. Na seção de segurança dos dados, declare que o anúncio é da Google.
 
 O anúncio abre em tela cheia a cada duas mortes, depois que a luz apaga. No navegador ele não aparece. Texto que pode ir na política: o Lumina não tem conta. Recorde, faíscas e melhorias ficam no aparelho. No app Android, o AdMob pode receber identificadores do aparelho para mostrar o anúncio.
 
