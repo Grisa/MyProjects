@@ -29,11 +29,11 @@ Sirva a pasta numa máquina acessível na mesma rede e abra o endereço no naveg
 
 ## Play Store
 
-O jogo está pronto para virar o app. Ainda não dá para enviar a ficha: isso usa a sua conta da Play Console, um keystore seu e os IDs do AdMob. Nada disso entra no repositório.
+O identificador na Play é `com.grisa.lumina.game`. O bundle assinado para o teste interno é `Lumina-internal.aab`, versão 2.19, API 36. O keystore de upload fica fora do git.
 
 1. Crie a conta de desenvolvedor na Google Play Console.
-2. No AdMob, crie o app e um bloco **intersticial**. Cole o ID do app e o ID do bloco em `js/ads.js` (`appId` e `interstitialId`) e mude `testing` para `false`. Enquanto `testing` estiver `true`, o app usa o anúncio de teste da Google.
-3. Troque `appId` em `capacitor.config.json` para o identificador definitivo, no formato `com.seudominio.lumina`, antes de gerar o Android.
+2. Os IDs do AdMob ficam em `js/ads.js` (`appId` e `interstitialId`), com `testing` em `false`. O mesmo ID de aplicativo entra no `AndroidManifest.xml`. O anúncio de amostra da Google não entra num app da Play.
+3. O identificador do app é `com.grisa.lumina.game`, em `capacitor.config.json`. O primeiro envio à Play grava esse identificador.
 4. Na pasta `lumina`. O Capacitor não aceita a raiz como `webDir`, então a cópia que entra no app fica em `www`. O navegador continua abrindo a raiz.
 
    ```bash
@@ -47,7 +47,7 @@ O jogo está pronto para virar o app. Ainda não dá para enviar a ficha: isso u
    No `android/build.gradle`, dentro de `buildscript.dependencies`, acrescente o Kotlin que o anúncio usa:
 
    ```gradle
-   classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.10"
+   classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.20"
    ```
 5. Em `android/app/src/main/AndroidManifest.xml`, na activity principal, fixe a orientação:
 
@@ -55,12 +55,12 @@ O jogo está pronto para virar o app. Ainda não dá para enviar a ficha: isso u
    android:screenOrientation="portrait"
    ```
 
-   Dentro de `<application>`, o AdMob exige o ID do app. Use o de teste enquanto `testing` for `true` (`ca-app-pub-3940256099942544~3347511713`) e troque pelo seu antes de publicar:
+   Dentro de `<application>`, o AdMob exige o ID do app quando o plugin está instalado. Use o ID real do AdMob:
 
    ```xml
    <meta-data
        android:name="com.google.android.gms.ads.APPLICATION_ID"
-       android:value="ca-app-pub-3940256099942544~3347511713" />
+       android:value="ca-app-pub-SEU_ID~SEU_APP" />
    ```
 
 6. Para instalar no celular sem a loja, ainda na pasta `android`:

@@ -1,19 +1,19 @@
 /**
- * Full-screen ad every second death. It only runs inside the Android app.
+ * Full-screen ad every second death, inside the Android app only.
  * The browser build keeps playing with no network.
  *
- * Before publishing, create the app in AdMob and replace the empty ids.
- * Leave testing true until the real ids are in place. Test ads in a
- * published app can get the AdMob account suspended.
+ * The ids below are the real AdMob app and interstitial unit. testing
+ * stays false so a Play build never requests Google's sample ads.
+ * Keep the app id in the Android manifest under
+ * com.google.android.gms.ads.APPLICATION_ID.
  */
 
 const DEATHS_KEY = "lumina-deaths";
-const TEST_INTERSTITIAL = "ca-app-pub-3940256099942544/1033173712";
 
 export const AD_CONFIG = {
-  testing: true,
-  appId: "",
-  interstitialId: "",
+  testing: false,
+  appId: "ca-app-pub-7213428821254710~5090033276",
+  interstitialId: "ca-app-pub-7213428821254710/5416115148",
 };
 
 export function shouldShowAd(deaths) {
@@ -37,7 +37,12 @@ function writeDeaths(deaths) {
   }
 }
 
+function adsReady() {
+  return Boolean(AD_CONFIG.appId && AD_CONFIG.interstitialId);
+}
+
 function adMob() {
+  if (!adsReady()) return null;
   const cap = globalThis.Capacitor;
   if (!cap?.isNativePlatform?.() || !cap.registerPlugin) return null;
   try {
@@ -50,7 +55,6 @@ function adMob() {
 let prepared = false;
 
 function interstitialId() {
-  if (AD_CONFIG.testing || !AD_CONFIG.interstitialId) return TEST_INTERSTITIAL;
   return AD_CONFIG.interstitialId;
 }
 

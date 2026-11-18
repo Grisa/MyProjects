@@ -9,12 +9,12 @@
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
-    "@capacitor-community/admob": "^6.0.0",
-    "@capacitor/android": "^6.2.0",
-    "@capacitor/app": "^6.0.3",
-    "@capacitor/core": "^6.2.0"
+    "@capacitor-community/admob": "^8.4.2",
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.6.2"
   },
   "devDependencies": {
-    "@capacitor/cli": "^6.2.0"
+    "@capacitor/cli": "^8.6.2"
   }
 }
