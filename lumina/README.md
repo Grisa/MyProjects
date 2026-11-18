@@ -29,7 +29,7 @@ Sirva a pasta numa máquina acessível na mesma rede e abra o endereço no naveg
 
 ## Play Store
 
-O identificador na Play é `com.grisa.lumina.game`. O bundle assinado para o teste interno é `Lumina-internal.aab`, versão 2.20, API 36. O keystore de upload fica fora do git.
+O identificador na Play é `com.grisa.lumina.game`. O bundle assinado para o teste interno é `Lumina-internal.aab`, versão 2.21, API 36. O keystore de upload fica fora do git.
 
 1. Crie a conta de desenvolvedor na Google Play Console.
 2. Os IDs do AdMob ficam em `js/ads.js` (`appId` e `interstitialId`), com `testing` em `false`. O mesmo ID de aplicativo entra no `AndroidManifest.xml`. O anúncio de amostra da Google não entra num app da Play.
