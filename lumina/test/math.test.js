@@ -40,6 +40,11 @@ import {
   actLine,
   vesperActs,
   vesperLight,
+  MARK_LIFE,
+  markCatches,
+  lossLine,
+  nextRunGoal,
+  goalLine,
   castKinds,
   paceAt,
   spawnJitter,
@@ -224,6 +229,21 @@ test("each act climbs to its own ceiling and the next act continues it", () => {
   let light = 40;
   for (let i = 0; i < 3; i += 1) light = vesperLight(light, 100);
   assert.equal(light, 82);
+  assert.equal(markCatches(null, { x: 10 }), false);
+  assert.equal(markCatches({ x: 40, half: 20 }, { x: 55, markSource: true }), false);
+  assert.equal(markCatches({ x: 40, half: 20 }, { x: 55, wall: 1 }), false);
+  assert.equal(markCatches({ x: 40, half: 20 }, { x: 55 }), true);
+  assert.equal(markCatches({ x: 40, half: 20 }, { x: 61 }), false);
+  assert.equal(lossLine("diamond", false), "A shard took the light.");
+  assert.equal(lossLine("orb", true), "The Mantle closed the field.");
+  assert.deepEqual(nextRunGoal(160), { left: 40, name: "Act 2" });
+  assert.deepEqual(nextRunGoal(350), { left: 50, name: "Act 3" });
+  assert.deepEqual(nextRunGoal(580), { left: 20, name: "the Mantle" });
+  assert.deepEqual(nextRunGoal(640, 0), { left: 260, name: "the Mantle" });
+  assert.equal(goalLine(nextRunGoal(160)), "40 points until Act 2.");
+  assert.equal(goalLine({ left: 1, name: "Act 2" }), "1 point until Act 2.");
+  assert.equal(goalLine(null), "");
+  assert.equal(MARK_LIFE > 3, true);
 
   const height = DIFFICULTY.referenceHeight;
   const start = difficultyAt(0, height);

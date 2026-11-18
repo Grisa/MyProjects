@@ -44,6 +44,8 @@ export const EXTINGUISH_FRACTION = 0.25;
 export const VESPER_SLICE = 0.14;
 /** Vesper never restores the light past this share of the start. */
 export const VESPER_CAP = 0.82;
+/** How long a Mark stain waits for the next shadow. */
+export const MARK_LIFE = 4.2;
 
 export function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -282,6 +284,50 @@ export function passScore(player, enemy) {
   const inLight = distance <= player.lightRadius + enemy.r;
   const close = distance <= player.coreRadius + enemy.r + grazeMargin(player);
   return inLight && close ? 2 : 1;
+}
+
+/** A shadow whose center is in the stained lane. The one that painted it is spared. */
+export function markCatches(mark, enemy) {
+  if (!mark || !enemy || enemy.markSource || enemy.wall) return false;
+  if (!(mark.half > 0)) return false;
+  return Math.abs(enemy.x - mark.x) <= mark.half;
+}
+
+const LOSS_NAMES = {
+  orb: "bubble",
+  diamond: "shard",
+  shard: "splinter",
+  lantern: "watcher",
+  grin: "grin",
+};
+
+/** The sentence under the score. A mantle wall is not named as a bubble. */
+export function lossLine(kind, mantle) {
+  if (mantle) return "The Mantle closed the field.";
+  return `A ${LOSS_NAMES[kind] || "shadow"} took the light.`;
+}
+
+/** The next act, or the next Mantle once the run is endless. */
+export function nextRunGoal(score, bossVisit = 0) {
+  const points = Math.max(0, score);
+  if (points < 200) return { left: 200 - points, name: "Act 2" };
+  if (points < 400) return { left: 400 - points, name: "Act 3" };
+  if (points < 600) return { left: 600 - points, name: "the Mantle" };
+  let visit = Math.max(0, bossVisit);
+  let threshold = bossThreshold(visit);
+  if (points >= threshold) {
+    visit += 1;
+    threshold = bossThreshold(visit);
+  }
+  const left = threshold - points;
+  if (left <= 0) return null;
+  return { left, name: "the Mantle" };
+}
+
+export function goalLine(goal) {
+  if (!goal || !(goal.left > 0)) return "";
+  const unit = goal.left === 1 ? "point" : "points";
+  return `${goal.left} ${unit} until ${goal.name}.`;
 }
 
 /** 0 at the flash, 1 when the wider field has finished opening. */

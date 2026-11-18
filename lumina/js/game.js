@@ -31,6 +31,11 @@ import {
   actLine,
   vesperActs,
   vesperLight,
+  MARK_LIFE,
+  markCatches,
+  lossLine,
+  nextRunGoal,
+  goalLine,
   castKinds,
   paceAt,
   waveWait,
@@ -188,6 +193,9 @@ const state = {
   shielded: false,
   shieldSparks: 0,
   newBest: false,
+  lossKind: "",
+  lossMantle: false,
+  mark: null,
   hintSeen: loadHintSeen(),
   tutorialSeen: loadTutorialSeen(),
   tutorialPage: 0,
@@ -328,7 +336,9 @@ function menuLine() {
 
 function overLine() {
   const best = state.newBest ? "New best." : `Best ${state.highScore}.`;
-  return `Game over. Score ${state.score}. ${best}`;
+  const cause = lossLine(state.lossKind, state.lossMantle);
+  const goal = goalLine(nextRunGoal(state.score, state.bossVisit));
+  return `Game over. ${cause} Score ${state.score}. ${goal} ${best}`.replace(/\s+/g, " ").trim();
 }
 
 function loadHighScore() {
@@ -577,6 +587,9 @@ function resetRun(pointerX) {
   state.shielded = false;
   state.shieldSparks = 0;
   state.newBest = false;
+  state.lossKind = "";
+  state.lossMantle = false;
+  state.mark = null;
   state.mode = "play";
   rememberHint();
   announce("Score 0");
@@ -603,6 +616,7 @@ function endRun() {
   state.newBest = beaten;
   state.mode = "over";
   state.dying = false;
+  state.mark = null;
   state.pointerId = null;
   announce(overLine());
   playDeath();
@@ -806,7 +820,11 @@ function hurt(enemy) {
   state.calm = 0;
   state.shake = 1;
   burst(hit.x, hit.y);
-  if (player.targetLight === 0) state.dying = true;
+  if (player.targetLight === 0) {
+    state.dying = true;
+    state.lossMantle = Boolean(enemy.wall);
+    state.lossKind = enemy.kind || "orb";
+  }
   if (guarded) playGuard();
   else playHit(player.targetLight === 0);
 }
@@ -835,6 +853,10 @@ function scaleWorld(k) {
   for (const floater of state.floaters) {
     floater.x *= k;
     floater.y *= k;
+  }
+  if (state.mark) {
+    state.mark.x *= k;
+    state.mark.half *= k;
   }
 }
 
@@ -913,6 +935,7 @@ function emitBossBeat(beat, y) {
 }
 
 function beginBoss() {
+  state.mark = null;
   state.boss = {
     phase: "arrive",
     timer: BOSS_ARRIVE,
@@ -1165,7 +1188,28 @@ function update(dt) {
           if (enemy.points > 1) {
             popup(enemy.x, player.y - unit() * 0.05, "+2");
             playGraze();
+            if (perk.mark) {
+              enemy.markSource = true;
+              state.mark = {
+                x: enemy.x,
+                half: Math.max(enemy.r, 18),
+                life: MARK_LIFE,
+                max: MARK_LIFE,
+              };
+              popup(enemy.x, player.y - unit() * 0.1, "mark");
+            }
           }
+        }
+        if (
+          state.mark
+          && enemy.y + enemy.r > 0
+          && enemy.y < player.y
+          && markCatches(state.mark, enemy)
+        ) {
+          const stained = state.enemies.splice(i, 1)[0];
+          burst(stained.x, stained.y);
+          state.mark = null;
+          continue;
         }
         if (enemy.y - enemy.r > fieldH()) {
           state.enemies.splice(i, 1);
@@ -1214,6 +1258,10 @@ function update(dt) {
         }
       }
       maybeBoss();
+      if (state.mark) {
+        state.mark.life -= dt;
+        if (state.mark.life <= 0) state.mark = null;
+      }
     }
 
     player.lightRadius = lerp(player.lightRadius, player.targetLight, LIGHT_LERP, dt);
@@ -2185,6 +2233,13 @@ function drawIcon(icon, x, y, size, color) {
     ctx.lineTo(0, -s * 0.85);
     ctx.lineTo(s * 0.62, -s * 0.05);
     ctx.stroke();
+  } else if (icon === "mark") {
+    ctx.moveTo(0, -s * 0.95);
+    ctx.lineTo(0, s * 0.95);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, s * 0.2, s * 0.36, 0, Math.PI * 2);
+    ctx.stroke();
   } else if (icon === "vesper") {
     ctx.moveTo(-s * 0.9, s * 0.28);
     ctx.lineTo(s * 0.9, s * 0.28);
@@ -2643,7 +2698,19 @@ function drawGameOver() {
   ctx.fillStyle = state.newBest ? "rgba(255, 228, 170, 0.95)" : "rgba(210, 226, 236, 0.8)";
   ctx.font = font(Math.max(15, unit() * 0.038), 500);
   ctx.fillText(state.newBest ? "New best" : `Best ${state.highScore}`, x, recordY);
-  drawSparkCount(x, recordY + Math.max(28, unit() * 0.062), "center");
+  const sparkY = recordY + Math.max(28, unit() * 0.062);
+  drawSparkCount(x, sparkY, "center");
+
+  const causeY = sparkY + Math.max(36, unit() * 0.08);
+  ctx.fillStyle = state.lossMantle ? "rgba(255, 214, 170, 0.92)" : "rgba(214, 236, 244, 0.9)";
+  ctx.font = font(Math.max(16, unit() * 0.04), 500);
+  ctx.fillText(lossLine(state.lossKind, state.lossMantle), x, causeY);
+  const goal = goalLine(nextRunGoal(state.score, state.bossVisit));
+  if (goal) {
+    ctx.fillStyle = "rgba(176, 196, 208, 0.78)";
+    ctx.font = font(Math.max(14, unit() * 0.034), 500);
+    ctx.fillText(goal, x, causeY + Math.max(24, unit() * 0.05));
+  }
 
   const stack = overStack();
   drawLightButton(stack.again, "Play again");
@@ -2825,6 +2892,23 @@ function drawSettings() {
   ctx.fillText("Erases best score, sparks, and upgrades.", state.viewW / 2, eraseRect().y - 26);
   drawPill(eraseRect(), "Erase data", "rgba(255, 120, 130, 0.5)");
   if (state.confirmErase) drawConfirmErase();
+}
+
+function drawMark() {
+  const mark = state.mark;
+  if (!mark) return;
+  const fade = clamp(mark.life / mark.max, 0, 1);
+  const h = fieldH();
+  ctx.save();
+  ctx.fillStyle = `rgba(186, 244, 255, ${0.16 * fade})`;
+  ctx.fillRect(mark.x - mark.half, 0, mark.half * 2, h);
+  ctx.strokeStyle = `rgba(214, 252, 255, ${0.8 * fade})`;
+  ctx.lineWidth = 1.25;
+  ctx.beginPath();
+  ctx.moveTo(mark.x, 0);
+  ctx.lineTo(mark.x, h);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawPlayerGlow() {
@@ -3236,6 +3320,7 @@ function draw() {
     frameRim = perks().rim;
     drawFieldDust();
     drawBloom();
+    drawMark();
     drawPlayerGlow();
     if (state.mode === "play" || state.mode === "paused") {
       ctx.lineJoin = "round";

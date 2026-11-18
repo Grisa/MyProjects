@@ -261,6 +261,16 @@ export const UPGRADES = [
     requires: ["ima"],
     icon: "nova",
   },
+  {
+    id: "marca",
+    name: "Mark",
+    text: "A close pass stains the lane.",
+    cost: 420,
+    col: 3,
+    row: 5,
+    requires: ["clarao"],
+    icon: "mark",
+  },
 ];
 
 export function upgradeById(id) {
@@ -327,5 +337,6 @@ export function bonuses(owned) {
     shieldEvery: has("escudo3") ? 3 : has("escudo2") ? 4 : has("escudo") ? 5 : 0,
     nova: has("clarao"),
     vesper: has("vesper"),
+    mark: has("marca"),
   };
 }
