@@ -59,6 +59,7 @@ test("bonuses stack along a branch", () => {
   assert.equal(base.nova, false);
   assert.equal(base.vesper, false);
   assert.equal(base.mark, false);
+  assert.equal(base.iris, false);
   assert.equal(base.plenty, false);
 
   const grown = bonuses(new Set([
@@ -116,12 +117,17 @@ test("tiers get stronger and more expensive", () => {
   assert.equal(upgradeById("marca").requires[0], "clarao");
   assert.equal(nodeState(upgradeById("marca"), new Set(["ima"])), "locked");
   assert.equal(nodeState(upgradeById("marca"), new Set(["clarao"])), "available");
+  assert.equal(bonuses(new Set(["iris"])).iris, true);
+  assert.ok(upgradeById("iris").cost > upgradeById("marca").cost);
+  assert.equal(upgradeById("iris").requires[0], "vesper");
+  assert.equal(nodeState(upgradeById("iris"), new Set(["farol"])), "locked");
+  assert.equal(nodeState(upgradeById("iris"), new Set(["vesper"])), "available");
 });
 
 test("the whole tree costs more than a handful of runs", () => {
   const sum = UPGRADES.reduce((total, upgrade) => total + upgrade.cost, 0);
   assert.equal(upgradeById("centelha").cost, 20);
-  assert.equal(sum, 3840);
+  assert.equal(sum, 4480);
   assert.ok(upgradeById("brasa").cost > upgradeById("vortice").cost);
   assert.ok(upgradeById("abundancia").cost > upgradeById("ima").cost * 2);
 });

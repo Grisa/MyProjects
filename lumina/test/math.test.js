@@ -44,6 +44,12 @@ import {
   markCatches,
   sparkPace,
   sparkCap,
+  SKIES,
+  ENDLESS_HUE_IDS,
+  skyShift,
+  endlessHueIndex,
+  skyIdFor,
+  shuffleHues,
   lossLine,
   nextRunGoal,
   goalLine,
@@ -220,6 +226,36 @@ test("each act climbs to its own ceiling and the next act continues it", () => {
   assert.equal(actLine(1), "Act 2. Splinters and grins arrive.");
   assert.equal(actLine(2), "Act 3. The light opens the field.");
   assert.equal(actLine(3), "Endless. The dark does not stop.");
+  assert.equal(skyShift(0), 0);
+  assert.equal(skyShift(600), 0);
+  assert.equal(skyShift(799), 0);
+  assert.equal(skyShift(800), 1);
+  assert.equal(skyShift(999), 1);
+  assert.equal(skyShift(1000), 2);
+  const order = ["wine", "pine", "ink", "copper", "steel", "amber"];
+  assert.equal(skyIdFor(0, order), "night");
+  assert.equal(skyIdFor(250, order), "tide");
+  assert.equal(skyIdFor(450, order), "veil");
+  assert.equal(skyIdFor(700, order), "veil");
+  assert.equal(skyIdFor(800, order), "wine");
+  assert.equal(skyIdFor(1000, order), "pine");
+  assert.equal(endlessHueIndex(2000, order.length), 0);
+  assert.equal(skyIdFor(2000, order), "wine");
+  const channelMax = (hex) => {
+    const n = Number.parseInt(hex.slice(1), 16);
+    return Math.max((n >> 16) & 255, (n >> 8) & 255, n & 255);
+  };
+  for (const sky of Object.values(SKIES)) {
+    assert.ok(channelMax(sky.glow) <= 0x42);
+    assert.ok(channelMax(sky.edge) <= 0x18);
+  }
+  let cursor = 0;
+  const rolls = [0.9, 0.1, 0.8, 0.2, 0.7];
+  const shuffled = shuffleHues(ENDLESS_HUE_IDS, () => rolls[cursor++]);
+  assert.equal(shuffled.length, ENDLESS_HUE_IDS.length);
+  assert.equal(new Set(shuffled).size, ENDLESS_HUE_IDS.length);
+  cursor = 0;
+  assert.deepEqual(shuffleHues(ENDLESS_HUE_IDS, () => rolls[cursor++]), shuffled);
   assert.equal(vesperActs(0, 0), 0);
   assert.equal(vesperActs(0, 1), 1);
   assert.equal(vesperActs(2, 3), 1);

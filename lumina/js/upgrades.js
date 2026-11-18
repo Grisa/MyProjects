@@ -102,6 +102,16 @@ export const UPGRADES = [
     icon: "vesper",
   },
   {
+    id: "iris",
+    name: "Iris",
+    text: "When the endless sky turns, shadows wait.",
+    cost: 640,
+    col: 3,
+    row: -1,
+    requires: ["vesper"],
+    icon: "iris",
+  },
+  {
     id: "casco",
     name: "Shell 1",
     text: "Each hit takes a little less.",
@@ -338,5 +348,6 @@ export function bonuses(owned) {
     nova: has("clarao"),
     vesper: has("vesper"),
     mark: has("marca"),
+    iris: has("iris"),
   };
 }

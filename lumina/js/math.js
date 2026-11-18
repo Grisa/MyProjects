@@ -591,6 +591,61 @@ export function edgeSlots(x, width, radius, gap, side) {
 /** First mantle, then again after each chapter, once the run has moved on. */
 export const BOSS_SCORE = 600;
 export const BOSS_GAP = 300;
+/** Endless skies turn this many points after the Mantle, then on every step. */
+export const SKY_EVERY = 200;
+/** Iris holds new shadows when an endless sky turns, long enough to read the color. */
+export const IRIS_HOLD = 1.6;
+
+/** Act skies stay fixed. Endless skies are dark in the same way and shuffled per run. */
+export const SKIES = {
+  night: { glow: "#0c1222", edge: "#04060c" },
+  tide: { glow: "#12343a", edge: "#061416" },
+  veil: { glow: "#2a1642", edge: "#120818" },
+  ink: { name: "Ink", glow: "#102438", edge: "#050910" },
+  wine: { name: "Wine", glow: "#381420", edge: "#12060c" },
+  pine: { name: "Pine", glow: "#12301f", edge: "#06140e" },
+  copper: { name: "Copper", glow: "#3a2414", edge: "#140c06" },
+  steel: { name: "Steel", glow: "#1a2c34", edge: "#080e12" },
+  amber: { name: "Amber", glow: "#322816", edge: "#100e08" },
+};
+
+export const ENDLESS_HUE_IDS = ["ink", "wine", "pine", "copper", "steel", "amber"];
+
+/** 0 until 200 points into endless, then 1, 2, 3… at each further 200. */
+export function skyShift(score) {
+  const points = Math.max(0, score);
+  if (points < BOSS_SCORE + SKY_EVERY) return 0;
+  return Math.floor((points - BOSS_SCORE) / SKY_EVERY);
+}
+
+/** Palette slot for this score, or -1 while the run is still on an act sky. */
+export function endlessHueIndex(score, count) {
+  const shift = skyShift(score);
+  if (shift <= 0 || !(count > 0)) return -1;
+  return (shift - 1) % count;
+}
+
+export function skyIdFor(score, order) {
+  const index = endlessHueIndex(score, order?.length || 0);
+  if (index >= 0) return order[index];
+  const act = actIndex(score);
+  if (act <= 0) return "night";
+  if (act === 1) return "tide";
+  return "veil";
+}
+
+/** A new order of the endless hues. The same random sequence always shuffles the same way. */
+export function shuffleHues(ids, random = Math.random) {
+  const order = ids.slice();
+  for (let i = order.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    const swap = order[i];
+    order[i] = order[j];
+    order[j] = swap;
+  }
+  return order;
+}
+
 export const BOSS_HITS = 3;
 export const BOSS_ARRIVE = 1.15;
 export const BOSS_BETWEEN = 0.48;

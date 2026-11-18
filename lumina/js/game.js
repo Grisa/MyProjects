@@ -35,6 +35,12 @@ import {
   markCatches,
   sparkPace,
   sparkCap,
+  SKIES,
+  ENDLESS_HUE_IDS,
+  IRIS_HOLD,
+  skyIdFor,
+  endlessHueIndex,
+  shuffleHues,
   lossLine,
   nextRunGoal,
   goalLine,
@@ -160,12 +166,6 @@ const SHAKE_DECAY = 2.1;
 const MAX_DT = 0.05;
 const ACT_BLEND = 1.2;
 const ACT_BANNER = 2.2;
-const ACT_SKY = [
-  { glow: "#0c1222", edge: "#04060c" },
-  { glow: "#12343a", edge: "#061416" },
-  { glow: "#2a1642", edge: "#120818" },
-  { glow: "#2a1642", edge: "#120818" },
-];
 
 const canvas = document.querySelector("#game");
 const statusEl = document.querySelector("#status");
@@ -233,6 +233,9 @@ const state = {
   actBlend: 1,
   actBanner: "",
   actBannerLeft: 0,
+  sky: "night",
+  skyFrom: "night",
+  hueOrder: ENDLESS_HUE_IDS.slice(),
 };
 
 function loadHintSeen() {
@@ -528,7 +531,10 @@ function showRunSky() {
 
 function tickAct(dt) {
   if (state.actBlend < 1) state.actBlend = Math.min(1, state.actBlend + dt / ACT_BLEND);
-  else state.actFrom = state.act;
+  else {
+    state.actFrom = state.act;
+    state.skyFrom = state.sky;
+  }
   if (state.actBannerLeft > 0) state.actBannerLeft = Math.max(0, state.actBannerLeft - dt);
 }
 
@@ -545,6 +551,25 @@ function noteAct() {
   if (line) announce(line);
   grantVesper(state.actFrom, next);
   return Boolean(line);
+}
+
+function noteSky() {
+  const next = skyIdFor(state.score, state.hueOrder);
+  if (next === state.sky) return false;
+  const endless = endlessHueIndex(state.score, state.hueOrder.length) >= 0;
+  state.skyFrom = state.sky;
+  state.sky = next;
+  state.actBlend = 0;
+  if (!endless) return false;
+  const hue = SKIES[next];
+  state.actBanner = { title: hue.name, detail: "The field turns." };
+  state.actBannerLeft = ACT_BANNER;
+  announce(`${hue.name}. The field turns.`);
+  const mantleDue = state.score >= bossThreshold(state.bossVisit);
+  if (perks().iris && !state.boss && !mantleDue) {
+    state.spawnTimer = Math.max(state.spawnTimer, IRIS_HOLD);
+  }
+  return true;
 }
 
 function grantVesper(from, to) {
@@ -573,6 +598,9 @@ function resetRun(pointerX) {
   state.actBlend = 1;
   state.actBanner = "";
   state.actBannerLeft = 0;
+  state.sky = "night";
+  state.skyFrom = "night";
+  state.hueOrder = shuffleHues(ENDLESS_HUE_IDS);
   state.player = makePlayer(Number.isFinite(pointerX) ? pointerX : state.viewW / 2);
   state.enemies = [];
   state.orbs = [];
@@ -746,6 +774,7 @@ function collectSpark(orb) {
   state.sparks += gained;
   if (perk.sparkScore && !state.boss) {
     state.score += perk.sparkScore;
+    noteSky();
     noteAct();
   }
   maybeBloom();
@@ -1220,8 +1249,9 @@ function update(dt) {
             const gained = scoreForPass(enemy.points ?? 1, Boolean(state.boss));
             if (gained > 0) {
               state.score += gained;
+              const turned = noteSky();
               const crossed = noteAct();
-              if (!crossed) announce(`Score ${state.score}`);
+              if (!turned && !crossed) announce(`Score ${state.score}`);
               if (gained === 1) playPass();
               maybeBloom();
             }
@@ -1519,16 +1549,18 @@ function setLetterSpacing(px) {
 
 function drawBackground() {
   const run = showRunSky();
-  const from = run ? state.actFrom : 0;
-  const to = run ? state.act : 0;
+  const from = run ? state.skyFrom : "night";
+  const to = run ? state.sky : "night";
   const blend = run ? state.actBlend : 1;
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(backgroundLayer(from), 0, 0);
-  if (blend < 1 && to !== from) {
-    ctx.globalAlpha = blend;
-    ctx.drawImage(backgroundLayer(to), 0, 0);
-    ctx.globalAlpha = 1;
+  if (blend < 1) {
+    if (to !== from) {
+      ctx.globalAlpha = blend;
+      ctx.drawImage(backgroundLayer(to), 0, 0);
+      ctx.globalAlpha = 1;
+    }
     ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
     drawActSweep(blend);
   }
@@ -1547,7 +1579,7 @@ function backgroundLayer(act) {
   const key = `${size}|${act}`;
   const cached = backgroundLayers.get(key);
   if (cached) return cached;
-  const sky = ACT_SKY[act] || ACT_SKY[0];
+  const sky = SKIES[act] || SKIES.night;
   const layer = document.createElement("canvas");
   layer.width = Math.max(1, Math.ceil(state.width * state.dpr));
   layer.height = Math.max(1, Math.ceil(state.height * state.dpr));
@@ -2250,6 +2282,12 @@ function drawIcon(icon, x, y, size, color) {
     ctx.beginPath();
     ctx.arc(0, s * 0.28, s * 0.55, Math.PI * 1.08, Math.PI * 1.92);
     ctx.stroke();
+  } else if (icon === "iris") {
+    ctx.arc(0, 0, s * 0.78, 0.4, Math.PI * 1.85);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, s * 0.32, 0, Math.PI * 2);
+    ctx.fill();
   } else if (icon === "eye") {
     ctx.ellipse(0, 0, s * 0.9, s * 0.52, 0, 0, Math.PI * 2);
     ctx.stroke();
